@@ -242,6 +242,7 @@ const distFiles = new Set(
     "server/errors",
     "server/findings-service",
     "server/routes",
+    "server/scans",
     "server/server",
     "server/serve",
     "server/sqlite-store",
