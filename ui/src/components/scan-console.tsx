@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, isPending, outcomeOf, ScanApi, type ScanJob } from "@/lib/api";
 import { useVerify } from "@/lib/verify-context";
+import { DEV_TOKEN } from "@/lib/config";
 import { Card } from "./section";
 import { Markdown } from "./markdown";
 import { CopyButton } from "./copy-button";
@@ -115,26 +116,33 @@ export function ScanConsole() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <label className="block">
-          <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">
-            API token
-          </span>
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="bearer token for /v1/scans"
-            spellCheck={false}
-            autoComplete="off"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-[0.85rem] text-foreground outline-none focus:border-accent"
-          />
-        </label>
-        <p className="mt-1 text-[0.8rem] leading-relaxed text-muted">
-          Held in this tab only — never stored, and sent sealed inside the attested channel, so the
-          proxy terminating TLS in front of the cluster never sees it.
+      {DEV_TOKEN ? (
+        <p className="text-[0.82rem] leading-relaxed text-muted">
+          Using the development token from <span className="font-mono">NEXT_PUBLIC_SCAN_TOKEN</span>
+          . It is sent sealed inside the attested channel, exactly as a pasted one would be.
         </p>
-      </Card>
+      ) : (
+        <Card>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">
+              API token
+            </span>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="bearer token for /v1/scans"
+              spellCheck={false}
+              autoComplete="off"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-[0.85rem] text-foreground outline-none focus:border-accent"
+            />
+          </label>
+          <p className="mt-1 text-[0.8rem] leading-relaxed text-muted">
+            Held in this tab only — never stored, and sent sealed inside the attested channel, so
+            the proxy terminating TLS in front of the cluster never sees it.
+          </p>
+        </Card>
+      )}
 
       <form onSubmit={submit}>
         <Card>

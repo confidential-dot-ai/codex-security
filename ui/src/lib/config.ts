@@ -120,6 +120,15 @@ export function looksLikePem(text: string): boolean {
 export const PINS: TdxImagePin = DEFAULT_PROFILE.tdxImage;
 export const MESH_CA_PEM: string = DEFAULT_PROFILE.meshCaPem;
 
+/**
+ * Development convenience: a bearer token supplied at build time so the scan
+ * page can be used without pasting one. Set it in `.env.local`, which is not
+ * committed — the token is a live credential for an endpoint that runs billed
+ * inference, so it must never enter this repository. When it is unset the page
+ * asks for a token as before.
+ */
+export const DEV_TOKEN = process.env.NEXT_PUBLIC_SCAN_TOKEN ?? "";
+
 /** Copy the pages need that is not a security anchor. */
 export const SITE = {
   defaultEndpoint: DEFAULT_PROFILE.endpoint,
@@ -138,9 +147,16 @@ export const SITE = {
  */
 export const DEPLOYMENT = {
   image: "ghcr.io/confidential-dot-ai/codex-security:scan-api",
+  imageUrl: "https://github.com/confidential-dot-ai/codex-security/pkgs/container/codex-security",
   digest: "sha256:f67d4ae6b867c528503623af989c8943a8784df8aab9304a058f1e48b473e2ec",
   release: "c8s v0.33.1 (ec67bd8 + #691), ACME front door",
   releaseLong:
     "c8s v0.33.1 (ec67bd8) plus the operator-scope guard fix (c8s#691), a Cilium postStart fix, and a deployment-baked router upstream. Public TLS is terminated by the router's in-guest ACME sidecar, so the serving key is TEE-held and attest-lb is still served. Node image built 2026-09-23, locked profile, Intel TDX node CVM, Kubernetes v1.36.4+rke2r1.",
+  releaseUrl: "https://github.com/confidential-dot-ai/c8s/releases/tag/v0.33.1",
   kubernetes: "v1.36.4+rke2r1",
+  kubernetesUrl: "https://github.com/rancher/rke2/releases/tag/v1.36.4%2Brke2r1",
+  nodeImage: "ghcr.io/confidential-dot-ai/c8s-base",
+  nodeImageUrl: "https://github.com/confidential-dot-ai/c8s/pkgs/container/c8s-base",
+  /** The upstream findings dashboard that `codex-security serve` ships. */
+  dashboardPath: "/dashboard/",
 } as const;

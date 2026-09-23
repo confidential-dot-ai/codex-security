@@ -23,11 +23,11 @@ const REFERENCES = [
     go: "Source",
   },
   {
-    k: "The endpoint",
-    t: SITE.defaultEndpoint,
-    v: "The c8s router in front of the scan API. Its serving certificate is CDS-issued and attestation-bound, not WebPKI.",
-    href: SITE.defaultEndpoint,
-    go: "Open once to accept the certificate",
+    k: "The protocol",
+    t: "attest-pq · PROTOCOL.md",
+    v: "The client-first X-Wing exchange this page speaks, written down normatively: transcript, report_data binding, and the sealed record format.",
+    href: "https://github.com/confidential-dot-ai/c8s-verify-js/blob/main/PROTOCOL.md",
+    go: "Read it",
   },
 ];
 

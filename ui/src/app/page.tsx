@@ -5,6 +5,7 @@ import { Verdict } from "@/components/verdict";
 import { PinsCard } from "@/components/pins-card";
 import { DeploymentCard } from "@/components/deployment-card";
 import { References } from "@/components/references";
+import { TryIt } from "@/components/try-it";
 
 export default function TrustPage() {
   return (
@@ -17,6 +18,7 @@ export default function TrustPage() {
         <PinsCard />
         <DeploymentCard />
       </div>
+      <TryIt />
       <References />
     </main>
   );

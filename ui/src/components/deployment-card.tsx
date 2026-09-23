@@ -1,27 +1,42 @@
-import { DEPLOYMENT, SITE } from "@/lib/config";
+import { DEPLOYMENT } from "@/lib/config";
 import { Card } from "./section";
 import { CopyButton } from "./copy-button";
 
-const ROWS: { k: string; v: string; note: string }[] = [
-  {
-    k: "Endpoint",
-    v: SITE.defaultEndpoint,
-    note: "The c8s router in front of the scan API. Its certificate is CDS-issued and attestation-bound, not WebPKI.",
-  },
+const ROWS: { k: string; v: string; href: string; go: string; note: string }[] = [
   {
     k: "Workload image",
     v: DEPLOYMENT.image,
-    note: "The scan API container. Public, so you can pull and read it.",
+    href: DEPLOYMENT.imageUrl,
+    go: "package on GHCR",
+    note: "The scan API container. Public, so you can pull it and read exactly what runs.",
   },
   {
     k: "Registry digest",
     v: DEPLOYMENT.digest,
-    note: "What GHCR serves and what the cluster admission allowlist pins. It differs from a digest computed locally, so this is the one to compare.",
+    href: `${DEPLOYMENT.imageUrl}`,
+    go: "published versions",
+    note: "What GHCR serves and what the cluster admission allowlist pins. A digest computed locally differs, so compare against this one.",
+  },
+  {
+    k: "Node image",
+    v: DEPLOYMENT.nodeImage,
+    href: DEPLOYMENT.nodeImageUrl,
+    go: "package on GHCR",
+    note: "The measured guest image. Its published manifest.json is where the MRTD and RTMR pins above come from.",
   },
   {
     k: "Cluster release",
     v: DEPLOYMENT.release,
+    href: DEPLOYMENT.releaseUrl,
+    go: "release notes",
     note: DEPLOYMENT.releaseLong,
+  },
+  {
+    k: "Kubernetes",
+    v: DEPLOYMENT.kubernetes,
+    href: DEPLOYMENT.kubernetesUrl,
+    go: "release notes",
+    note: "The distribution running inside the confidential node. The control plane sits outside the trust boundary by design.",
   },
 ];
 
@@ -30,10 +45,11 @@ const ROWS: { k: string; v: string; note: string }[] = [
 export function DeploymentCard() {
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold text-heading">What is running behind it</h2>
+      <h2 className="mb-1 text-lg font-semibold text-heading">What runs behind the endpoint</h2>
       <p className="mb-4 text-[0.88rem] leading-relaxed text-foreground">
-        These strings describe the deployment. They are not what the browser checks — the
-        measurements above are — but they tell you which public image to go and read.
+        These describe the deployment and every one of them is public. They are not what the
+        browser checks — the measurements above are — but they are how you go and read the thing
+        that was measured.
       </p>
       <dl className="flex flex-col gap-3">
         {ROWS.map((r) => (
@@ -47,7 +63,17 @@ export function DeploymentCard() {
                 <CopyButton text={r.v} />
               </span>
             </dd>
-            <dd className="mt-1 text-[0.78rem] leading-relaxed text-muted">{r.note}</dd>
+            <dd className="mt-1 text-[0.78rem] leading-relaxed text-muted">
+              {r.note}{" "}
+              <a
+                className="font-mono text-accent hover:underline"
+                href={r.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {r.go} ↗
+              </a>
+            </dd>
           </div>
         ))}
       </dl>

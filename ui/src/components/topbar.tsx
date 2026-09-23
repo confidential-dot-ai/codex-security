@@ -6,8 +6,8 @@ import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
 const TABS = [
-  { href: "/", label: "Trust" },
-  { href: "/scan", label: "Scan" },
+  { href: "/", label: "Verify the cluster" },
+  { href: "/scan", label: "Run a scan" },
 ];
 
 /** Top bar with the two pages. Not sticky: the page never takes over the screen. */
@@ -37,8 +37,10 @@ export function Topbar() {
               <Link
                 key={t.href}
                 href={t.href}
-                className={`font-mono text-xs uppercase tracking-wider transition-colors ${
-                  active ? "text-accent" : "text-muted hover:text-foreground"
+                className={`rounded-md border px-2.5 py-1 font-mono text-[0.72rem] tracking-wide transition-colors ${
+                  active
+                    ? "border-accent text-accent"
+                    : "border-border text-muted hover:border-accent hover:text-foreground"
                 }`}
                 aria-current={active ? "page" : undefined}
               >
