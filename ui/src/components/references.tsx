@@ -18,26 +18,18 @@ const REFERENCES = [
   {
     k: "The verifier on this page",
     t: "c8s-verify-js",
-    v: "vendored at d589419",
+    v: "github.com/confidential-dot-ai/c8s-verify-js",
     href: SITE.verifyLib,
-    note: "DCAP verification compiled to WebAssembly, plus the post-quantum channel. Vendored with its WASM because it is not published to npm.",
-  },
-  {
-    k: "The protocol",
-    t: "attest-pq · PROTOCOL.md",
-    v: "client-first X-Wing exchange",
-    href: "https://github.com/confidential-dot-ai/c8s-verify-js/blob/main/PROTOCOL.md",
-    note: "Written down normatively: the identity transcript, the report_data binding, and the sealed record format.",
+    note: "DCAP verification compiled to WebAssembly, plus the post-quantum channel. Every check on this page is made by this library, in your browser.",
   },
   {
     k: "The source",
     t: "codex-security",
-    v: "sdk/typescript/src/server/scans.ts · ui/",
+    v: "github.com/confidential-dot-ai/codex-security",
     href: SITE.repo,
-    note: "The scan API and this console. The fork adds both; the scanner itself is upstream.",
+    note: "The scanner, the scan API, and this console.",
   },
 ];
-
 export function References() {
   return (
     <section className="mt-12 border-t border-border pt-8" id="references">
@@ -46,7 +38,7 @@ export function References() {
       </h2>
       <p className="mb-5 max-w-[68ch] text-[0.95rem] leading-relaxed text-foreground">
         Every link in the chain is public: the exact image behind the endpoint, the platform it
-        runs on, the verifier running on this page, and the protocol they speak.
+        runs on, and the verifier running on this page.
       </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {REFERENCES.map((r) => (
