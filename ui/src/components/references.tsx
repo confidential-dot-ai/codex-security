@@ -1,33 +1,40 @@
-import { SITE } from "@/lib/config";
+import { DEPLOYMENT, SITE } from "@/lib/config";
 
 const REFERENCES = [
   {
+    k: "The workload, by digest",
+    t: "codex-security scan API",
+    v: `${DEPLOYMENT.image}@${DEPLOYMENT.digest}`,
+    href: DEPLOYMENT.imageUrl,
+    note: "The exact image admitted for the endpoint you just verified. Pull it and read what runs.",
+  },
+  {
     k: "The platform",
     t: "c8s · Confidential Kubernetes",
-    v: "Fail-closed pod admission, RA-TLS service mesh, measured node images.",
-    href: SITE.c8s,
-    go: "Source",
+    v: DEPLOYMENT.release,
+    href: DEPLOYMENT.releaseUrl,
+    note: "Fail-closed pod admission, an RA-TLS service mesh, and measured node images. Public TLS here is terminated by the router's in-guest ACME sidecar, so the serving key stays enclave-held.",
   },
   {
     k: "The verifier on this page",
     t: "c8s-verify-js",
-    v: "DCAP verification compiled to WebAssembly, plus the PQ channel. Vendored with its WASM, MIT.",
+    v: "vendored at d589419",
     href: SITE.verifyLib,
-    go: "Source",
-  },
-  {
-    k: "The workload",
-    t: "codex-security",
-    v: "The scan API is sdk/typescript/src/server/scans.ts; the console is ui/.",
-    href: SITE.repo,
-    go: "Source",
+    note: "DCAP verification compiled to WebAssembly, plus the post-quantum channel. Vendored with its WASM because it is not published to npm.",
   },
   {
     k: "The protocol",
     t: "attest-pq · PROTOCOL.md",
-    v: "The client-first X-Wing exchange this page speaks, written down normatively: transcript, report_data binding, and the sealed record format.",
+    v: "client-first X-Wing exchange",
     href: "https://github.com/confidential-dot-ai/c8s-verify-js/blob/main/PROTOCOL.md",
-    go: "Read it",
+    note: "Written down normatively: the identity transcript, the report_data binding, and the sealed record format.",
+  },
+  {
+    k: "The source",
+    t: "codex-security",
+    v: "sdk/typescript/src/server/scans.ts · ui/",
+    href: SITE.repo,
+    note: "The scan API and this console. The fork adds both; the scanner itself is upstream.",
   },
 ];
 
@@ -38,8 +45,8 @@ export function References() {
         Built on open, inspectable pieces
       </h2>
       <p className="mb-5 max-w-[68ch] text-[0.95rem] leading-relaxed text-foreground">
-        Every link in the chain is public: the platform source, the image the measurements came
-        from, the scanner, and the verifier running on this page.
+        Every link in the chain is public: the exact image behind the endpoint, the platform it
+        runs on, the verifier running on this page, and the protocol they speak.
       </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {REFERENCES.map((r) => (
@@ -48,14 +55,15 @@ export function References() {
               {r.k}
             </span>
             <span className="font-semibold text-heading">{r.t}</span>
-            <span className="whitespace-pre-line break-all font-mono text-[0.78rem] leading-relaxed text-muted">
-              {r.v}
-            </span>
-            <span className="mt-auto pt-1 font-mono text-[0.85rem]">
-              <a href={r.href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                {r.go} ↗
-              </a>
-            </span>
+            <a
+              className="break-all font-mono text-[0.78rem] leading-relaxed text-accent hover:underline"
+              href={r.href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {r.v} ↗
+            </a>
+            <span className="mt-auto pt-1 text-[0.78rem] leading-relaxed text-muted">{r.note}</span>
           </div>
         ))}
       </div>
