@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b0d10;
+  --panel: #12151a;
+  --line: #222831;
+  --ink: #e6e9ef;
+  --muted: #8b94a3;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --accent: #58a6ff;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "cv05", "ss01";
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.field {
+  background: #0d1015;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0.55rem 0.7rem;
+  color: var(--ink);
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.btn {
+  background: var(--accent);
+  color: #06090d;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.875rem;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.pulsing {
+  animation: pulse-dot 1.1s ease-in-out infinite;
+}

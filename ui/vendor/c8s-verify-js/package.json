@@ -1,0 +1,86 @@
+{
+  "name": "c8s-verify",
+  "version": "0.2.0",
+  "description": "Verify that a remote API is running in a C8s TEE-attested cluster, and establish a post-quantum over-encrypted channel to the attested Load Balancer.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/confidential-dot-ai/c8s-verify-js.git"
+  },
+  "homepage": "https://github.com/confidential-dot-ai/c8s-verify-js#readme",
+  "bugs": {
+    "url": "https://github.com/confidential-dot-ai/c8s-verify-js/issues"
+  },
+  "keywords": [
+    "confidential-computing",
+    "attestation",
+    "sev-snp",
+    "tee",
+    "remote-attestation",
+    "post-quantum",
+    "ml-kem",
+    "kubernetes"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./keyagreement": {
+      "types": "./dist/keyagreement.d.ts",
+      "default": "./dist/keyagreement.js"
+    },
+    "./channel": {
+      "types": "./dist/channel.d.ts",
+      "default": "./dist/channel.js"
+    },
+    "./base64": {
+      "types": "./dist/base64.d.ts",
+      "default": "./dist/base64.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!src/wasm",
+    "PROTOCOL.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"{src,test,demo}/**/*.ts\" eslint.config.js",
+    "format:check": "prettier --check \"{src,test,demo}/**/*.ts\" eslint.config.js",
+    "check": "npm run typecheck && npm run lint && npm run format:check",
+    "test": "node --import tsx --test test/*.test.ts",
+    "demo": "node --import tsx demo/server.ts",
+    "build:demo": "tsc -p tsconfig.demo.json && node scripts/copy-assets.mjs dist-demo/src",
+    "browser-check": "npm run build:demo && node --import tsx demo/browser-check.ts",
+    "gen-fixtures": "bash demo/gen-fixtures.sh",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "mlkem-wasm": "^0.0.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.20.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "playwright": "^1.60.0",
+    "prettier": "^3.8.4",
+    "tsx": "^4.22.4",
+    "typescript": "~5.6.3",
+    "typescript-eslint": "^8.61.1"
+  }
+}
