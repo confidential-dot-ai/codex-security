@@ -69,7 +69,7 @@ export function Controls() {
                 : ""}
         </span>
       </div>
-      {status !== "ok" && (
+      {status !== "ok" && SITE.frontDoor === "cds" && (
         <p className="mt-3 text-[0.8rem] leading-relaxed text-muted">
           First time against this endpoint?{" "}
           <a href={endpoint} target="_blank" rel="noreferrer">

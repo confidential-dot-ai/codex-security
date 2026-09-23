@@ -125,6 +125,17 @@ export function Verdict() {
           <dd>{a.trustClass}</dd>
         </div>
         <div>
+          <dt className="font-mono text-[0.68rem] uppercase tracking-wider text-muted">
+            front door
+          </dt>
+          <dd>
+            {a.frontDoorMode}
+            {a.frontDoorMode === "cds" || a.frontDoorMode === "acme"
+              ? " — the serving key is held inside the enclave, which is why the transport binding to this exact leaf was served at all"
+              : " — the serving key is not enclave-held, so the transport binding was not served"}
+          </dd>
+        </div>
+        <div>
           <dt className="font-mono text-[0.68rem] uppercase tracking-wider text-muted">freshness</dt>
           <dd>report_data binds this session and nonce: {String(a.reportDataMatch)}</dd>
         </div>

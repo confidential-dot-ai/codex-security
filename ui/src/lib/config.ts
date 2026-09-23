@@ -22,6 +22,15 @@ export interface Profile {
   description: string;
   /** Base URL of the c8s router fronting the scan API. */
   endpoint: string;
+  /**
+   * Which credential terminates public TLS at the router. `cds` is a mesh-issued,
+   * attestation-bound certificate a browser will not trust on sight; `acme` is a
+   * WebPKI certificate issued to an in-guest sidecar, so the key is still
+   * TEE-held. The endpoint commits this into the attestation transcript, so the
+   * value here is only what the page expects — the verdict reports what was
+   * actually proven.
+   */
+  frontDoor: "cds" | "acme";
   /** The guest image tuple, from the node image's published manifest.json. */
   tdxImage: TdxImagePin;
   /**
@@ -55,6 +64,29 @@ export const PROFILES: Record<string, Profile> = {
       "The scan API behind the c8s router on an Intel TDX node CVM. " +
       "Pins are the node image's published measurements.",
     endpoint: "https://15.204.104.35:30443",
+    frontDoor: "cds",
+    tdxImage: {
+      mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
+      rtmr1:
+        "3b260925fec6a0553b9a6aecf223a6ed1ddcbbee17df0b0e5c8bc056b0751c8530a83e71ed5b7ef9ff142ae842cdcecd",
+      rtmr2:
+        "eb120e4c57137f7a3f72c6ca3403d6f26da427df4ddcf0ed2580b72ab08a7a6078034c728a78e1153f77f199c9bbf615",
+    },
+    meshCaPem: CODEX_TDX_MESH_CA,
+  },
+  // The same cluster once the router serves a WebPKI certificate through the
+  // in-guest ACME sidecar. Same hardware, same image, so the pins and the mesh
+  // CA are unchanged; what changes is the credential terminating public TLS,
+  // which the endpoint commits into the attestation transcript as
+  // front_door_mode. Select with NEXT_PUBLIC_DEPLOYMENT=codex-acme.
+  "codex-acme": {
+    id: "codex-acme",
+    label: "codex-tdx behind the ACME front door (Intel TDX, bare metal)",
+    description:
+      "The scan API behind the c8s router, with public TLS terminated by the in-guest ACME " +
+      "sidecar. The serving key stays TEE-held, so attest-lb is still served.",
+    endpoint: "https://codex-security-scanner-dev.confidential.ai",
+    frontDoor: "acme",
     tdxImage: {
       mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
       rtmr1:
@@ -112,6 +144,7 @@ export const MESH_CA_PEM: string = DEFAULT_PROFILE.meshCaPem;
 /** Copy the pages need that is not a security anchor. */
 export const SITE = {
   defaultEndpoint: DEFAULT_PROFILE.endpoint,
+  frontDoor: DEFAULT_PROFILE.frontDoor,
   platformLabel: "Intel TDX, bare metal (DCAP)",
   repo: "https://github.com/confidential-dot-ai/codex-security",
   c8s: "https://github.com/confidential-dot-ai/c8s",
