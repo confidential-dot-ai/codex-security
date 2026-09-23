@@ -1,35 +1,27 @@
 // Run the same verification the page runs, from Node, against a live endpoint.
 //
-//   NODE_TLS_REJECT_UNAUTHORIZED=0 node scripts/verify-node.mjs [endpoint]
+//   npm run verify:node                 # the endpoint and pins from config.ts
+//   npm run verify:node -- http://localhost:8443   # e.g. through the dev proxy
+//   TOK=<bearer> npm run verify:node    # also list scans over the tunnel
 //
-// TLS is disabled deliberately: the serving certificate is CDS-issued and
-// attestation-bound, not WebPKI, so Node cannot chain it — and the real check
-// is the attestation below, not the TLS chain. A browser instead needs the tab
-// to accept the certificate once.
+// The pins and the endpoint are read out of src/lib/config.ts, so this cannot
+// drift from what the page enforces. It is the quickest way to tell a protocol
+// or pin problem from a browser problem.
 
+import { readFileSync } from "node:fs";
 import { C8sClient } from "c8s-verify";
 
-const ENDPOINT = process.argv[2] ?? "https://15.204.104.35:30443";
+const config = readFileSync(new URL("../src/lib/config.ts", import.meta.url), "utf8");
 
-const PINS = {
-  mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
-  rtmr1:
-    "3b260925fec6a0553b9a6aecf223a6ed1ddcbbee17df0b0e5c8bc056b0751c8530a83e71ed5b7ef9ff142ae842cdcecd",
-  rtmr2:
-    "eb120e4c57137f7a3f72c6ca3403d6f26da427df4ddcf0ed2580b72ab08a7a6078034c728a78e1153f77f199c9bbf615",
+const pick = (key) => {
+  const m = new RegExp(`${key}:\\s*\n?\\s*"([0-9a-f]{96})"`).exec(config);
+  if (!m) throw new Error(`could not read ${key} from config.ts`);
+  return m[1];
 };
-
-const MESH_CA_PEM = `-----BEGIN CERTIFICATE-----
-MIIBqTCCAS+gAwIBAgIQDwFa3rbWAX/Q9O+vT+Ci6TAKBggqhkjOPQQDAzAWMRQw
-EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMwNDMwMTRaFw0yNzA5MjMwNDMw
-MTRaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
-YgAEkKjY1skCZNhMSgN2DCmRW9lOSxG+0pQ6HNr09v9CqlgXm3YDvE9V8XssMLna
-K8z53IHIwX3M4y9zJlEeiv/kEBsUoB95rfHytNgB+R5Mp8j2T5n6C36OmxDYmX6s
-atXyo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
-FgQUQUNZf7feLOUEdj4SbY95oULRD6QwCgYIKoZIzj0EAwMDaAAwZQIxALY/0wnH
-W/OwswGZE1UZDnA0N0AwaLL+mxfrGXPUp+3oRq8YV6MafB8EuoxAPMwiggIwCrgj
-TlKCWHwYJ1n3LKb38QwPtGGlUznyHCEP5oBnCeFuodtIdf4/V03chYz34o6A
------END CERTIFICATE-----`;
+const PINS = { mrtd: pick("mrtd"), rtmr1: pick("rtmr1"), rtmr2: pick("rtmr2") };
+const MESH_CA_PEM = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/.exec(config)[0];
+const ENDPOINT =
+  process.argv[2] ?? /endpoint:\s*"([^"]+)"/.exec(config)[1];
 
 const client = new C8sClient({
   baseUrl: ENDPOINT,
@@ -47,6 +39,7 @@ try {
     endpoint: ENDPOINT,
     platform: a.platform,
     trustClass: a.trustClass,
+    frontDoorMode: a.frontDoorMode,
     measurement: a.measurement,
     rtmr1: a.claims?.platform_data?.rtmr_1,
     rtmr2: a.claims?.platform_data?.rtmr_2,
@@ -54,8 +47,9 @@ try {
     sessionId: session.sessionId,
     warnings: a.warnings,
   });
-  const res = await session.fetch("/v1/scans");
-  console.log("tunnel /v1/scans ->", res.status, res.text().slice(0, 120));
+  const headers = process.env.TOK ? { Authorization: `Bearer ${process.env.TOK}` } : {};
+  const res = await session.fetch("/v1/scans", { headers });
+  console.log("tunnel /v1/scans ->", res.status, res.text().slice(0, 200));
 } catch (e) {
   console.error("FAILED", e?.code ?? "", e?.message ?? e);
   process.exitCode = 1;

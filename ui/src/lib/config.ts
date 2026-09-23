@@ -42,18 +42,19 @@ export interface Profile {
   meshCaPem: string;
 }
 
-// Mesh CA of the cluster below, pinned 2026-09-23 from an operator session
-// that had already attested the node, not from an unverified fetch.
-const CODEX_TDX_MESH_CA = `-----BEGIN CERTIFICATE-----
-MIIBqTCCAS+gAwIBAgIQDwFa3rbWAX/Q9O+vT+Ci6TAKBggqhkjOPQQDAzAWMRQw
-EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMwNDMwMTRaFw0yNzA5MjMwNDMw
-MTRaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
-YgAEkKjY1skCZNhMSgN2DCmRW9lOSxG+0pQ6HNr09v9CqlgXm3YDvE9V8XssMLna
-K8z53IHIwX3M4y9zJlEeiv/kEBsUoB95rfHytNgB+R5Mp8j2T5n6C36OmxDYmX6s
-atXyo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
-FgQUQUNZf7feLOUEdj4SbY95oULRD6QwCgYIKoZIzj0EAwMDaAAwZQIxALY/0wnH
-W/OwswGZE1UZDnA0N0AwaLL+mxfrGXPUp+3oRq8YV6MafB8EuoxAPMwiggIwCrgj
-TlKCWHwYJ1n3LKb38QwPtGGlUznyHCEP5oBnCeFuodtIdf4/V03chYz34o6A
+// Mesh CA of the cluster below. Re-pinned 2026-09-23 at the production cutover:
+// a rebuilt cluster mints a new mesh CA, so this value moves with the RTMRs.
+// It comes from an operator who had already attested the node.
+const CODEX_MESH_CA = `-----BEGIN CERTIFICATE-----
+MIIBqjCCAS+gAwIBAgIQDxMEqKaJeclYafzRtCNvrzAKBggqhkjOPQQDAzAWMRQw
+EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMyMjUxNTdaFw0yNzA5MjMyMjUx
+NTdaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
+YgAEAgxu9y+2RywKg72kXFqwOsGhciylM0j2Mk68O6F5tfKKKfCrvhImKhvGP8cX
+a68HMyNf9BBEwOU8Eu8u5RdTkiwi1bcQGfrCZIyC+aPcpEmkqqVfAQGO4o7Y/xkF
+EolMo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
+FgQU8awySzOJKh+fVDQ++GCP9Z16a4AwCgYIKoZIzj0EAwMDaQAwZgIxANnhaVvq
+AvBHrhjdhorIRjRaGl/enhb7d/7IbVfalEAJeFw+ImK1pPiIuEDDaXXTmgIxAM9s
+N15n4HB2xT1H2fpoRVPA3gpZKnYkQI8KogsmHDKWJBZbB8D75kIEU4M7D6Tqmw==
 -----END CERTIFICATE-----`;
 
 export const PROFILES: Record<string, Profile> = {
@@ -61,40 +62,18 @@ export const PROFILES: Record<string, Profile> = {
     id: "codex-tdx",
     label: "codex-tdx (Intel TDX, bare metal)",
     description:
-      "The scan API behind the c8s router on an Intel TDX node CVM. " +
-      "Pins are the node image's published measurements.",
-    endpoint: "https://15.204.104.35:30443",
-    frontDoor: "cds",
-    tdxImage: {
-      mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
-      rtmr1:
-        "3b260925fec6a0553b9a6aecf223a6ed1ddcbbee17df0b0e5c8bc056b0751c8530a83e71ed5b7ef9ff142ae842cdcecd",
-      rtmr2:
-        "eb120e4c57137f7a3f72c6ca3403d6f26da427df4ddcf0ed2580b72ab08a7a6078034c728a78e1153f77f199c9bbf615",
-    },
-    meshCaPem: CODEX_TDX_MESH_CA,
-  },
-  // The same cluster once the router serves a WebPKI certificate through the
-  // in-guest ACME sidecar. Same hardware, same image, so the pins and the mesh
-  // CA are unchanged; what changes is the credential terminating public TLS,
-  // which the endpoint commits into the attestation transcript as
-  // front_door_mode. Select with NEXT_PUBLIC_DEPLOYMENT=codex-acme.
-  "codex-acme": {
-    id: "codex-acme",
-    label: "codex-tdx behind the ACME front door (Intel TDX, bare metal)",
-    description:
-      "The scan API behind the c8s router, with public TLS terminated by the in-guest ACME " +
-      "sidecar. The serving key stays TEE-held, so attest-lb is still served.",
+      "The scan API behind the c8s router on an Intel TDX node CVM, with public TLS terminated " +
+      "by the router's in-guest ACME sidecar. Pins are the node image's published measurements.",
     endpoint: "https://codex-security-scanner-dev.confidential.ai",
     frontDoor: "acme",
     tdxImage: {
       mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
       rtmr1:
-        "3b260925fec6a0553b9a6aecf223a6ed1ddcbbee17df0b0e5c8bc056b0751c8530a83e71ed5b7ef9ff142ae842cdcecd",
+        "168c5937c01d8a0b9228844b65ea01c2ef5ead14f6719ebb135cc9f1a6ea6acda53bad6cd4695ccad2a9d7155c5405b0",
       rtmr2:
-        "eb120e4c57137f7a3f72c6ca3403d6f26da427df4ddcf0ed2580b72ab08a7a6078034c728a78e1153f77f199c9bbf615",
+        "f8e0a8be2706cdaa6aa96e885998da1652c288548fd0c210e592e7797aae76abecee7d592ee8fd8a9e3a5f8b386ecfc9",
     },
-    meshCaPem: CODEX_TDX_MESH_CA,
+    meshCaPem: CODEX_MESH_CA,
   },
 };
 
@@ -160,8 +139,8 @@ export const SITE = {
 export const DEPLOYMENT = {
   image: "ghcr.io/confidential-dot-ai/codex-security:scan-api",
   digest: "sha256:f67d4ae6b867c528503623af989c8943a8784df8aab9304a058f1e48b473e2ec",
-  release: "c8s v0.33.1 (ec67bd8 + #691)",
+  release: "c8s v0.33.1 (ec67bd8 + #691), ACME front door",
   releaseLong:
-    "c8s v0.33.1 (ec67bd8) plus the operator-scope guard fix (c8s#691), a Cilium postStart fix, and a deployment-baked router upstream. Node image built 2026-09-23, locked profile, Intel TDX node CVM, Kubernetes v1.36.4+rke2r1.",
+    "c8s v0.33.1 (ec67bd8) plus the operator-scope guard fix (c8s#691), a Cilium postStart fix, and a deployment-baked router upstream. Public TLS is terminated by the router's in-guest ACME sidecar, so the serving key is TEE-held and attest-lb is still served. Node image built 2026-09-23, locked profile, Intel TDX node CVM, Kubernetes v1.36.4+rke2r1.",
   kubernetes: "v1.36.4+rke2r1",
 } as const;

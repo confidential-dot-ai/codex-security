@@ -1,6 +1,7 @@
 "use client";
 
 import { useVerify } from "@/lib/verify-context";
+import { SITE } from "@/lib/config";
 import { Disclosure } from "./disclosure";
 import { CopyButton } from "./copy-button";
 
@@ -52,12 +53,14 @@ export function Verdict() {
           {error?.code ? `[${error.code}] ` : ""}
           {error?.message ?? "unknown error"}
         </p>
-        <p className="mt-2 text-[0.85rem] leading-relaxed text-muted">
-          If the browser could not reach the endpoint at all, open it in a tab once and accept its
-          certificate. The serving certificate is CDS-issued and attestation-bound, not WebPKI, so
-          a browser will not trust it on sight — and the fetch then fails before any attestation
-          happens.
-        </p>
+        {SITE.frontDoor === "cds" && (
+          <p className="mt-2 text-[0.85rem] leading-relaxed text-muted">
+            If the browser could not reach the endpoint at all, open it in a tab once and accept its
+            certificate. This deployment&apos;s serving certificate is CDS-issued and
+            attestation-bound, not WebPKI, so a browser will not trust it on sight — and the fetch
+            then fails before any attestation happens.
+          </p>
+        )}
       </div>
     );
   }

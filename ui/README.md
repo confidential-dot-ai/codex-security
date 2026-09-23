@@ -53,18 +53,22 @@ verbatim rather than transcribed.
 
 ## Running against a cluster
 
-The serving certificate is CDS-issued and attestation-bound, not WebPKI, so a
-browser will not trust it on sight. Open the endpoint in a tab once and accept
-its certificate before connecting; otherwise the fetch fails before any
-attestation happens and the cascade reports a connection error.
-
 ```bash
 npm install
 npm run dev     # http://localhost:3000
 ```
 
-Enter the endpoint, paste the API token (held in the tab only — never stored),
-review the pins, then **Verify and connect**.
+Open the trust page, click **Verify the cluster**, then go to the scan page and
+paste the API token (held in the tab only — never stored).
+
+The router terminates public TLS with a WebPKI certificate issued to its
+in-guest ACME sidecar, so the browser trusts the endpoint outright and there is
+nothing to accept by hand. The serving key stays inside the enclave, which is
+why the endpoint still serves `attest-lb` — the binding to that exact serving
+leaf. c8s serves it only for the TEE-held-key front doors (`cds` and `acme`),
+never for `webpki`. The verified result carries which one you got, and the trust
+page shows it.
+
 
 ## Pages
 
@@ -111,31 +115,36 @@ browser problem.
 
 ## Local loop: the dev proxy
 
-The serving certificate blocks the browser before anything else can happen, and
-some browsers report that only as an opaque `NetworkError`. For local work:
+Not needed against an `acme` front door, whose certificate the browser trusts.
+It exists for a `cds` deployment, where the browser refuses the origin until the
+tab has accepted the attestation-bound certificate by hand:
 
 ```bash
-npm run proxy   # http://localhost:8443 -> https://15.204.104.35:30443
+npm run proxy   # http://localhost:8443 -> the endpoint
 npm run dev     # then put http://localhost:8443 in the endpoint field
 ```
 
 This does not weaken the check. Verification never trusted the TLS chain: it
 verifies a nonce-bound TDX quote and the mesh identity proof carried inside the
 attestation bundle, against pins the page holds out of band, and the sealed
-channel is established end to end through the proxy rather than with it. A
-proxy sees exactly what the TLS-terminating load balancer already sees — which
-is the threat the channel exists to answer. Development only; a deployed page
-must point at the endpoint itself.
+channel is established end to end through the proxy rather than with it. A proxy
+sees exactly what the TLS-terminating load balancer already sees — which is the
+threat the channel exists to answer. Development only; a deployed page must
+point at the endpoint itself.
+
 
 ## Talking to the cluster from a browser
 
-Two properties of the deployment shape the UI, both measured against the live
-endpoint:
-
-- The serving certificate is CDS-issued and attestation-bound, so a browser
-  blocks `fetch()` to the origin until the tab has opened it once and accepted
-  the interstitial. A failure at that point happens *before any attestation
-  ran*, so the page reports it as a connection error, never as a verdict.
 - `/v1/scans` answers a direct browser call with `401` and no CORS headers at
-  all, so direct calls can never work. Every API call therefore rides the
-  attested tunnel, which is also what keeps the token sealed.
+  all, so direct calls can never work. Every API call rides the attested tunnel,
+  which is also what keeps the token sealed.
+- Verification must use the `attest-pq` / `attest-lb` path, which is what
+  `C8sClient.connect()` does. Under the ACME front door `c8s verify` in its
+  default *discovery* mode fails by construction: discovery attests the
+  CDS-issued mesh certificate while the wire serves the Let's Encrypt leaf, so
+  their SHA-256s differ. Only `attest-pq` / `attest-lb` binds the leaf actually
+  serving the connection, so a failing `c8s verify --mode discovery` says
+  nothing about this page.
+- A failure before any attestation ran is reported as a connection error, never
+  as a verdict, and every request in the flow carries a 20s deadline.
+

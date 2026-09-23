@@ -27,6 +27,7 @@ import {
 // reporting one opaque success or failure at the end.
 import { deriveChannel, generateXWingKeyPair, xwingDecapsulate } from "c8s-verify/keyagreement";
 import { bytesToBase64Url } from "c8s-verify/base64";
+import { SITE } from "./config";
 
 
 export type StepId = "nonce" | "dcap" | "mrtd" | "rtmr1" | "rtmr2" | "meshca" | "channel";
@@ -164,12 +165,19 @@ const REQUEST_TIMEOUT_MS = 20_000;
 function reachabilityHint(baseUrl: string, e: unknown): string {
   const msg = errText(e);
   const timedOut = e instanceof DOMException && e.name === "TimeoutError";
-  return timedOut
-    ? `${baseUrl} accepted the connection but did not answer within ${REQUEST_TIMEOUT_MS / 1000}s. ` +
-        "Nothing was verified."
-    : `the browser could not reach ${baseUrl} (${msg}). Open ${baseUrl} in a tab once and accept ` +
-        "its certificate — it is CDS-issued and attestation-bound, not WebPKI, so the browser " +
-        "blocks the request before any attestation can run.";
+  if (timedOut) {
+    return (
+      `${baseUrl} accepted the connection but did not answer within ` +
+      `${REQUEST_TIMEOUT_MS / 1000}s. Nothing was verified.`
+    );
+  }
+  const certHint =
+    SITE.frontDoor === "cds"
+      ? ` Open ${baseUrl} in a tab once and accept its certificate — it is CDS-issued and ` +
+        "attestation-bound, not WebPKI, so the browser blocks the request before any attestation " +
+        "can run."
+      : "";
+  return `the browser could not reach ${baseUrl} (${msg}).${certHint}`;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
