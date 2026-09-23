@@ -69,6 +69,16 @@ export function Controls() {
                 : ""}
         </span>
       </div>
+      {status !== "ok" && (
+        <p className="mt-3 text-[0.8rem] leading-relaxed text-muted">
+          First time against this endpoint?{" "}
+          <a href={endpoint} target="_blank" rel="noreferrer">
+            Open it in a tab
+          </a>{" "}
+          and accept its certificate once. It is CDS-issued and attestation-bound, not WebPKI, so
+          until then the browser blocks the request before any attestation can run.
+        </p>
+      )}
       {endpoint.trim().replace(/\/+$/, "") !== SITE.defaultEndpoint && (
         <p className="mt-2 text-[0.8rem] text-warn">
           Non-default endpoint. The pins on this page still decide pass or fail.

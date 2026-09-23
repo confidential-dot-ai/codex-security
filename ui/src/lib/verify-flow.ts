@@ -150,6 +150,28 @@ function measuredFromClaims(a: AttestationResult): Measured {
   };
 }
 
+
+/** How long any single request in the flow may take. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * A failure here happened before any attestation ran, so it is a connection
+ * problem and must be reported as one. The overwhelmingly common cause is the
+ * serving certificate: it is CDS-issued and attestation-bound, not WebPKI, so
+ * the browser refuses the origin until the user has opened it in a tab once and
+ * accepted it.
+ */
+function reachabilityHint(baseUrl: string, e: unknown): string {
+  const msg = errText(e);
+  const timedOut = e instanceof DOMException && e.name === "TimeoutError";
+  return timedOut
+    ? `${baseUrl} accepted the connection but did not answer within ${REQUEST_TIMEOUT_MS / 1000}s. ` +
+        "Nothing was verified."
+    : `the browser could not reach ${baseUrl} (${msg}). Open ${baseUrl} in a tab once and accept ` +
+        "its certificate — it is CDS-issued and attestation-bound, not WebPKI, so the browser " +
+        "blocks the request before any attestation can run.";
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -170,8 +192,16 @@ export async function runVerification(
     throw new VerificationError("nonce", "Enter a valid endpoint URL.");
   }
 
+  // Every request this flow makes gets a deadline. Without one, a browser that
+  // has not been shown the CDS certificate, or a router that accepts the
+  // connection and never answers, leaves the cascade spinning with nothing to
+  // report — which is worse than a plain failure.
+  const timedFetch: typeof fetch = (input, init) =>
+    fetch(input, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+
   const client = new C8sClient({
     baseUrl,
+    fetch: timedFetch,
     platform,
     requireFreshness: true,
     // MRTD alone pins only the TDVF firmware; the tuple pins the whole guest
@@ -195,12 +225,8 @@ export async function runVerification(
   try {
     bundle = await client.fetchAttestation(nonce, keyPair);
   } catch (e) {
-    onStep("nonce", "fail");
-    throw new VerificationError(
-      "nonce",
-      `could not fetch a fresh attestation from ${baseUrl}: ${errText(e)}`,
-      codeOf(e),
-    );
+    onStep("nonce", "fail", reachabilityHint(baseUrl, e));
+    throw new VerificationError("nonce", reachabilityHint(baseUrl, e), codeOf(e) ?? "network_error");
   }
   // Presentational echo check (verifyAttestation enforces it again, and the
   // report_data check below is what binds the nonce into hardware evidence).
