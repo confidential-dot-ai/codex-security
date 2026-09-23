@@ -110,17 +110,9 @@ export function AllowlistCard() {
               const containers = [...(w.initContainers ?? []), ...(w.containers ?? [])];
               const image = containers[0]?.image ?? w.label;
               const url = ghcrUrl(image);
-              const exact = containers.some((ctr) => ctr.command?.policy === "exact");
               return (
                 <li key={name} className="border-t border-border pt-2.5 first:border-0 first:pt-0">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-mono text-[0.8rem] font-semibold text-heading">
-                      {name}
-                    </span>
-                    <span className="shrink-0 font-mono text-[0.68rem] uppercase tracking-wider text-muted">
-                      {exact ? "command pinned exactly" : "command unconstrained"}
-                    </span>
-                  </div>
+                  <div className="font-mono text-[0.8rem] font-semibold text-heading">{name}</div>
                   {url ? (
                     <a
                       className="block break-all font-mono text-[0.72rem] text-accent hover:underline"
