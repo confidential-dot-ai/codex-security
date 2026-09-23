@@ -1,6 +1,19 @@
 import type { Evidence } from "./hcl.js";
 import { type MeshIdentityProof } from "./identity.js";
 import { type TdxImage } from "./manifest.js";
+/**
+ * Minimum SEV-SNP TCB floor: security patch levels (SPLs) the reported TCB
+ * must meet or exceed, component by component. Values come from AMD security
+ * bulletins for the deployment's processor generation; `fmc` exists only on
+ * Turin and a floor requiring it rejects reports that do not carry it.
+ */
+export interface SnpMinTcb {
+    bootloader: number;
+    tee: number;
+    snp: number;
+    microcode: number;
+    fmc?: number;
+}
 export interface VerifyPolicy {
     /** accepted launch digests (hex sha-384) */
     measurements: string[];
@@ -90,15 +103,41 @@ export interface VerifyPolicy {
      * is rejected rather than silently ignored.
      */
     tdxImage?: TdxImage;
-}
-export interface SessionPubKeyB64 {
-    x25519: string;
-    mlkem768: string;
+    /**
+     * Minimum SEV-SNP TCB floor, pinned from AMD security bulletins. A verified
+     * report whose reported TCB is below any component fails closed
+     * (`tcb_denied`). Measurement pinning does not replace this: a genuine,
+     * correctly-measured guest on unpatched platform firmware verifies without
+     * it. SNP platforms only ("snp" | "az-snp") — TDX has its own TCB model, so
+     * the pin is rejected elsewhere rather than silently dropped.
+     */
+    minTcb?: SnpMinTcb;
+    /**
+     * DER-encoded AMD KDS CRL for the deployment's processor generation
+     * (`https://kdsintf.amd.com/vcek/v1/<product>/crl`), fetched or stapled by
+     * the caller — the WASM verifier cannot reach AMD KDS itself. The bytes
+     * need no transport trust: the verifier checks the CRL's signature against
+     * the bundled AMD root and its thisUpdate/nextUpdate freshness window
+     * before trusting it, then requires the VEK to not be revoked. Supplying it
+     * makes revocation part of the verdict (`collateralVerified: true`); a
+     * supplied CRL that cannot be positively verified fails closed
+     * (`collateral_denied`), never as "skipped". SNP platforms only.
+     */
+    snpCrl?: Uint8Array;
+    /**
+     * Require the revocation collateral to be verified for the verdict to pass
+     * (production policy). With this set, a result whose collateral was never
+     * checked fails with `collateral_required` instead of verifying with a
+     * warning. Requires `snpCrl` — requiring collateral while supplying none
+     * could never succeed and is rejected upfront. SNP platforms only: the
+     * browser verifier has no TDX collateral path yet, so requiring it there
+     * is rejected rather than accepted-and-always-failing.
+     */
+    requireCollateral?: boolean;
 }
 export interface AttestationBundle {
     version: string;
     platform: string;
-  front_door_mode?: string;
     /**
      * SNP processor generation the responder declares. Not trusted on its own:
      * it selects the VCEK/ASK/ARK chain the report is verified against, so a
@@ -109,8 +148,15 @@ export interface AttestationBundle {
     nonce: string;
     evidence: Evidence;
     cds_cert_pem: string;
+    /** Credential model terminating the front door ("cds" | "webpki" | "acme"), committed by the transcript. */
+    front_door_mode: string;
     ear?: string;
-    session_pubkey: SessionPubKeyB64;
+    /** Echo of the client's X-Wing encapsulation key (base64url, 1216 bytes). */
+    xwing_ek: string;
+    /** The server's X-Wing ciphertext (base64url, 1120 bytes). */
+    xwing_ct: string;
+    /** The session identifier (base64url, 16 bytes), committed by report_data. */
+    session_id: string;
     identity_proof: MeshIdentityProof;
 }
 /** Claims block inside the WASM verifier's JSON result. */
@@ -160,14 +206,23 @@ export interface AttestationResult {
     /** true only when the identity transcript is hardware-bound (report_data matched). */
     identityBound: boolean;
     /**
-     * Verified identity transcript hash used as the HKDF context. Hardware-bound
+     * Whether endorsement/revocation collateral was verified as part of this
+     * verdict (for SNP: the AMD KDS CRL's signature and freshness checked, and
+     * the VEK not on it). `false` means revocation was never checked — the
+     * verdict is hardware-signature- and measurement-complete but not
+     * collateral-complete, and a matching warning says so. Set
+     * {@link VerifyPolicy.requireCollateral} to make `false` a failure instead.
+     */
+    collateralVerified: boolean;
+    /**
+     * Verified identity transcript hash used as the HKDF salt. Hardware-bound
      * only when {@link identityBound} is true.
      */
     keyAgreementContext: Uint8Array;
-    sessionPubKey: {
-        x25519: Uint8Array;
-        mlkem768: Uint8Array;
-    };
+    /** The decoded, echo-checked key exchange: our ek, the server's ct, the session id. */
+    keyExchange: KeyExchangeEcho;
+    /** The front-door credential model the endpoint committed into the verified transcript. */
+    frontDoorMode: string;
     cert: CertInfo;
     claims: WasmClaims;
     /**
@@ -205,13 +260,23 @@ export interface AttestationResult {
  * go through {@link verifyAttestation} / {@link verifyEvidence}.
  */
 export declare function enforceTdxImagePins(result: WasmVerifyResult, image: TdxImage): string[];
+/** The decoded key-exchange half of the bundle. */
+export interface KeyExchangeEcho {
+    xwingEk: Uint8Array;
+    xwingCt: Uint8Array;
+    sessionId: Uint8Array;
+}
 /**
  * Verify an attestation bundle end to end.
  *
  * @param bundle the LB attest-pq response
  * @param nonce the nonce WE generated and sent
+ * @param policy the verification policy
+ * @param expectedXwingEk the X-Wing encapsulation key WE sent; the bundle must
+ *   echo it exactly. Omit only when re-verifying a saved bundle offline, where
+ *   the result is not a freshness or key-binding proof for this caller.
  */
-export declare function verifyAttestation(bundle: AttestationBundle, nonce: Uint8Array, policy: VerifyPolicy): Promise<AttestationResult>;
+export declare function verifyAttestation(bundle: AttestationBundle, nonce: Uint8Array, policy: VerifyPolicy, expectedXwingEk?: Uint8Array): Promise<AttestationResult>;
 export interface VerifyEvidenceOptions {
     /**
      * "milan" | "genoa" | "turin"; required for "snp", ignored for "az-snp"
@@ -247,6 +312,18 @@ export interface VerifyEvidenceOptions {
      * Requires `platform: "tdx"`.
      */
     tdxImage?: TdxImage;
+    /** Minimum SEV-SNP TCB floor; see {@link VerifyPolicy.minTcb}. SNP only. */
+    minTcb?: SnpMinTcb;
+    /**
+     * DER AMD KDS CRL for the deployment's generation; see
+     * {@link VerifyPolicy.snpCrl}. SNP only.
+     */
+    snpCrl?: Uint8Array;
+    /**
+     * Require the revocation collateral to be verified for the verdict to
+     * pass; see {@link VerifyPolicy.requireCollateral}. Requires `snpCrl`.
+     */
+    requireCollateral?: boolean;
 }
 export interface EvidenceResult {
     ok: true;
@@ -254,6 +331,8 @@ export interface EvidenceResult {
     measurement: string;
     reportVersion: number;
     reportDataMatch: boolean | null;
+    /** Whether revocation collateral was verified; see {@link AttestationResult.collateralVerified}. */
+    collateralVerified: boolean;
     claims: WasmClaims;
     /** Register pins this verdict compared exactly; see {@link AttestationResult.rtmrsPinned}. */
     rtmrsPinned?: string[];

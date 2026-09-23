@@ -1,4 +1,4 @@
-export type C8sErrorCode = "invalid_request" | "nonce_mismatch" | "verification_failed" | "report_data_mismatch" | "measurement_denied" | "measurement_incomplete" | "rtmr_denied" | "rtmr3_denied" | "invalid_cert" | "cert_chain" | "identity_binding" | "key_binding" | "channel_error" | "workload_not_attested" | "workload_invalid" | "workload_denied" | "workload_unresolved" | "allowlist_denied" | "unsupported";
+export type C8sErrorCode = "invalid_request" | "nonce_mismatch" | "verification_failed" | "report_data_mismatch" | "measurement_denied" | "measurement_incomplete" | "rtmr_denied" | "rtmr3_denied" | "tcb_denied" | "collateral_denied" | "collateral_required" | "invalid_cert" | "cert_chain" | "identity_binding" | "key_binding" | "channel_error" | "workload_not_attested" | "workload_invalid" | "workload_denied" | "workload_unresolved" | "allowlist_denied" | "unsupported";
 export interface C8sErrorOptions {
     cause?: unknown;
     details?: Record<string, unknown>;

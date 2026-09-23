@@ -28,6 +28,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./package.json": "./package.json",
     "./keyagreement": {
       "types": "./dist/keyagreement.d.ts",
       "default": "./dist/keyagreement.js"
@@ -40,7 +41,14 @@
       "types": "./dist/base64.d.ts",
       "default": "./dist/base64.js"
     },
-    "./package.json": "./package.json"
+    "./xwing": {
+      "types": "./dist/xwing.d.ts",
+      "default": "./dist/xwing.js"
+    },
+    "./nonce": {
+      "types": "./dist/nonce.d.ts",
+      "default": "./dist/nonce.js"
+    }
   },
   "types": "./dist/index.d.ts",
   "files": [
@@ -67,6 +75,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "mlkem-wasm": "^0.0.7"
   },
   "engines": {

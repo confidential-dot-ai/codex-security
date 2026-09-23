@@ -11,8 +11,7 @@
 //   const res = await session.fetch("/v1/chat", { method: "POST", body: "..." });
 import { generateNonce } from "./nonce.js";
 import { verifyAttestation, } from "./verify.js";
-import { clientKeyAgreement } from "./keyagreement.js";
-import { Channel, requestAAD, responseAAD } from "./channel.js";
+import { deriveChannel, generateXWingKeyPair, xwingDecapsulate, } from "./keyagreement.js";
 import { cborEncode, cborDecode } from "./cbor.js";
 import { bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "./base64.js";
 import { C8sVerifyError, fail } from "./errors.js";
@@ -71,56 +70,52 @@ export class C8sClient {
             at: opts.at,
             expectedRtmr3: opts.expectedRtmr3,
             tdxImage: opts.tdxImage,
+            minTcb: opts.minTcb,
+            snpCrl: opts.snpCrl,
+            requireCollateral: opts.requireCollateral,
         };
     }
     _url(path) {
         return `${this.baseUrl}${path}`;
     }
     /**
-     * Fetch the LB attest-pq bundle for a fresh nonce. There is no fallback,
-     * alias, or `pq`/`binding` parameter — the endpoint is the version selector,
-     * and a server that does not serve it is a server this client cannot verify.
+     * POST the client-first attest-pq request — the fresh nonce and our X-Wing
+     * encapsulation key — and return the bundle. There is no fallback, alias,
+     * or version parameter: the endpoint is the version selector, and a server
+     * that does not serve it is a server this client cannot verify.
      */
-    async fetchAttestation(nonce) {
-        const params = new URLSearchParams({ nonce: bytesToBase64Url(nonce) });
-        const url = `${this._url(this.prefix)}/attest-pq?${params.toString()}`;
-        const res = await this.fetch(url, { headers: { accept: "application/json" } });
+    async fetchAttestation(nonce, keyPair) {
+        const res = await this.fetch(`${this._url(this.prefix)}/attest-pq`, {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({
+                nonce: bytesToBase64Url(nonce),
+                xwing_ek: bytesToBase64Url(keyPair.ek),
+            }),
+        });
         if (!res.ok) {
             fail("verification_failed", `attestation endpoint returned HTTP ${res.status}`);
         }
         return (await res.json());
     }
     /**
-     * Run the full flow: fetch attestation, verify it, and establish the
-     * over-encrypted channel.
+     * Run the full flow in one round trip: send our key exchange, verify the
+     * returned evidence (which commits both sides of it), decapsulate, and
+     * derive the over-encrypted channel. The session is live on return.
      */
     async connect() {
         const nonce = generateNonce();
-        const bundle = await this.fetchAttestation(nonce);
-        const attestation = await verifyAttestation(bundle, nonce, this.policy);
-        const { key, handshake } = await clientKeyAgreement(attestation.sessionPubKey, attestation.keyAgreementContext);
-        // Register the channel with the LB; it derives the identical key.
-        const hsRes = await this.fetch(`${this._url(this.prefix)}/handshake`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                nonce: bytesToBase64Url(nonce),
-                client_x25519: bytesToBase64Url(handshake.clientX25519),
-                mlkem_ct: bytesToBase64Url(handshake.mlkemCiphertext),
-            }),
-        });
-        if (!hsRes.ok) {
-            fail("channel_error", `handshake endpoint returned HTTP ${hsRes.status}`);
-        }
-        const { session_id: sessionId } = (await hsRes.json());
-        if (!sessionId)
-            fail("channel_error", "handshake did not return a session id");
+        const keyPair = await generateXWingKeyPair();
+        const bundle = await this.fetchAttestation(nonce, keyPair);
+        const attestation = await verifyAttestation(bundle, nonce, this.policy, keyPair.ek);
+        const sharedSecret = await xwingDecapsulate(keyPair, attestation.keyExchange.xwingCt);
+        const channel = await deriveChannel("client", sharedSecret, attestation.keyAgreementContext, attestation.keyExchange.sessionId);
         return new Session({
             baseUrl: this.baseUrl,
             prefix: this.prefix,
             fetch: this.fetch,
-            channel: new Channel(key),
-            sessionId,
+            channel,
+            sessionId: bundle.session_id,
             attestation,
         });
     }
@@ -145,6 +140,15 @@ export class Session {
         this.attestation = o.attestation;
     }
     /**
+     * Channel-binding exporter (32 bytes): derived by both ends from the shared
+     * secret under the attested transcript, never sent on the wire. The sidecar
+     * hands the backend the same value as the X-C8s-Exporter header, so an
+     * application can bind bearer credentials to this exact channel.
+     */
+    get exporter() {
+        return this.channel.exporter;
+    }
+    /**
      * Make an over-encrypted request to the LB. The entire request — method, path,
      * headers, and body — is sealed with AES-256-GCM and sent to the tunnel
      * endpoint, so a TLS-terminating proxy in front of the LB sees only ciphertext.
@@ -158,30 +162,61 @@ export class Session {
             : typeof init.body === "string"
                 ? utf8ToBytes(init.body)
                 : init.body;
+        const headerPairs = Array.isArray(init.headers)
+            ? init.headers
+            : Object.entries(init.headers ?? {});
         const envelope = {
             method,
             path,
-            headers: init.headers ?? {},
+            headers: headerPairs,
             body: bodyBytes,
         };
-        const reqRecord = await this.channel.seal(cborEncode(envelope), requestAAD());
+        const reqRecord = await this.channel.sealRequest(cborEncode(envelope));
         const res = await this._fetch(`${this.baseUrl}${this.prefix}/tunnel`, {
             method: "POST",
             headers: { "content-type": "application/cbor", "x-c8s-session": this.sessionId },
-            body: cborEncode(reqRecord),
+            body: cborEncode({ seq: reqRecord.seq, ct: reqRecord.ct }),
         });
         if (!res.ok) {
             fail("channel_error", `over-encrypted request returned HTTP ${res.status}`);
         }
         const respRecord = cborDecode(new Uint8Array(await res.arrayBuffer()));
-        const respEnvelope = cborDecode(await this.channel.open(respRecord, responseAAD()));
+        const respEnvelope = cborDecode(await this.channel.openResponse(respRecord, reqRecord.seq));
+        const headersList = responseHeaderPairs(respEnvelope.headers);
         const bytes = respEnvelope.body ?? new Uint8Array(0);
         return {
             status: respEnvelope.status,
-            headers: respEnvelope.headers ?? {},
+            headers: firstValues(headersList),
+            headersList,
             bytes,
             text: () => bytesToUtf8(bytes),
         };
     }
+}
+/** First value of each field, for the collapsed record view. */
+function firstValues(pairs) {
+    const out = {};
+    for (const [name, value] of pairs) {
+        if (!(name in out))
+            out[name] = value;
+    }
+    return out;
+}
+/** Validate a response envelope's header pair list, refusing anything else. */
+function responseHeaderPairs(headers) {
+    if (headers === undefined || headers === null)
+        return [];
+    if (!Array.isArray(headers)) {
+        fail("channel_error", "malformed headers in response envelope");
+    }
+    for (const pair of headers) {
+        if (!Array.isArray(pair) ||
+            pair.length !== 2 ||
+            typeof pair[0] !== "string" ||
+            typeof pair[1] !== "string") {
+            fail("channel_error", "malformed header pair in response envelope");
+        }
+    }
+    return headers;
 }
 //# sourceMappingURL=index.js.map

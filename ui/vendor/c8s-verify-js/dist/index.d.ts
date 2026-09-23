@@ -1,12 +1,13 @@
-import { type AttestationBundle, type AttestationResult, type VerifyPolicy } from "./verify.js";
-import { Channel } from "./channel.js";
+import { type AttestationBundle, type AttestationResult, type SnpMinTcb, type VerifyPolicy } from "./verify.js";
+import { type XWingKeyPair } from "./keyagreement.js";
+import type { Channel } from "./channel.js";
 import type { TdxImage } from "./manifest.js";
 export { C8sVerifyError } from "./errors.js";
 export type { C8sErrorCode } from "./errors.js";
 export { BINDING_ATTEST_PQ, TRANSCRIPT_DOMAIN_TAG } from "./identity.js";
 export type { MeshIdentityProof } from "./identity.js";
 export { verifyAttestation, verifyEvidence } from "./verify.js";
-export type { VerifyPolicy, AttestationBundle, AttestationResult, EvidenceResult, VerifyEvidenceOptions, CertInfo, WorkloadInfo, } from "./verify.js";
+export type { VerifyPolicy, AttestationBundle, AttestationResult, EvidenceResult, VerifyEvidenceOptions, CertInfo, WorkloadInfo, SnpMinTcb, } from "./verify.js";
 export { OID_MATCHED_WORKLOAD, parseMatchedWorkload, parseAllowlist, resolveWorkload, allowlistDigestHex, } from "./workload.js";
 export type { MatchedWorkload, AllowlistDocument, AllowlistWorkload } from "./workload.js";
 export { parseImageManifest } from "./manifest.js";
@@ -75,15 +76,41 @@ export interface C8sClientOptions {
      * strongly recommended otherwise. Requires `platform: "tdx"`.
      */
     tdxImage?: TdxImage;
+    /**
+     * Minimum SEV-SNP TCB floor, pinned from AMD security bulletins. A genuine,
+     * correctly-measured guest on platform firmware below the floor is
+     * rejected (`tcb_denied`). SNP platforms only. See `VerifyPolicy.minTcb`.
+     */
+    minTcb?: SnpMinTcb;
+    /**
+     * DER AMD KDS CRL for the deployment's processor generation, fetched or
+     * stapled by the caller. Supplying it makes endorsement-key revocation part
+     * of every connection's verdict. SNP platforms only. See
+     * `VerifyPolicy.snpCrl`.
+     */
+    snpCrl?: Uint8Array;
+    /**
+     * Require the revocation collateral to be verified for the verdict to pass
+     * (production policy). Requires `snpCrl`. See
+     * `VerifyPolicy.requireCollateral`.
+     */
+    requireCollateral?: boolean;
 }
 export interface RequestInit {
     method?: string;
-    headers?: Record<string, string>;
+    /**
+     * Request headers: a plain record, or ordered [name, value] pairs when a
+     * field repeats (Cookie). Duplicate pairs reach the backend intact.
+     */
+    headers?: Record<string, string> | [string, string][];
     body?: string | Uint8Array;
 }
 export interface TunnelResponse {
     status: number;
+    /** First value of each field. Use headersList for repeated fields. */
     headers: Record<string, string>;
+    /** Every header field in response order as [name, value] pairs. */
+    headersList: [string, string][];
     bytes: Uint8Array;
     text: () => string;
 }
@@ -104,14 +131,16 @@ export declare class C8sClient {
     constructor(opts: C8sClientOptions);
     private _url;
     /**
-     * Fetch the LB attest-pq bundle for a fresh nonce. There is no fallback,
-     * alias, or `pq`/`binding` parameter — the endpoint is the version selector,
-     * and a server that does not serve it is a server this client cannot verify.
+     * POST the client-first attest-pq request — the fresh nonce and our X-Wing
+     * encapsulation key — and return the bundle. There is no fallback, alias,
+     * or version parameter: the endpoint is the version selector, and a server
+     * that does not serve it is a server this client cannot verify.
      */
-    fetchAttestation(nonce: Uint8Array): Promise<AttestationBundle>;
+    fetchAttestation(nonce: Uint8Array, keyPair: XWingKeyPair): Promise<AttestationBundle>;
     /**
-     * Run the full flow: fetch attestation, verify it, and establish the
-     * over-encrypted channel.
+     * Run the full flow in one round trip: send our key exchange, verify the
+     * returned evidence (which commits both sides of it), decapsulate, and
+     * derive the over-encrypted channel. The session is live on return.
      */
     connect(): Promise<Session>;
 }
@@ -127,6 +156,13 @@ export declare class Session {
     /** Verification result: measurement, platform, cert info, warnings, ... */
     readonly attestation: AttestationResult;
     constructor(o: SessionOptions);
+    /**
+     * Channel-binding exporter (32 bytes): derived by both ends from the shared
+     * secret under the attested transcript, never sent on the wire. The sidecar
+     * hands the backend the same value as the X-C8s-Exporter header, so an
+     * application can bind bearer credentials to this exact channel.
+     */
+    get exporter(): Uint8Array;
     /**
      * Make an over-encrypted request to the LB. The entire request — method, path,
      * headers, and body — is sealed with AES-256-GCM and sent to the tunnel

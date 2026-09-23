@@ -16,11 +16,25 @@
  *
  * Runs in offline mode ([`attestation::Verifier::offline`]): quote signatures
  * and cert chains verify against the bundled AMD/Intel roots (SNP evidence
- * must carry its VEK inline, as c8s evidence does), the SNP processor
- * generation is auto-detected from the report's CPUID fields (v3+ reports),
- * and the network-backed collateral checks (PCK CRL, TCB status, QE identity)
- * are skipped — `collateral_verified` stays `false`. Debug guests are always
- * rejected (`allow_debug` is never exposed to the browser; fail closed).
+ * must carry its VEK inline, as c8s evidence does), and the SNP processor
+ * generation is auto-detected from the report's CPUID fields (v3+ reports).
+ * Debug guests are always rejected (`allow_debug` is never exposed to the
+ * browser; fail closed).
+ *
+ * Collateral: the TDX network-backed checks (PCK CRL, TCB status, QE
+ * identity) need an async provider and are skipped. For SNP, the caller may
+ * staple the AMD KDS CRL as `snp_crl_der` — its signature is verified against
+ * the bundled ARK and its thisUpdate/nextUpdate window against the current
+ * time before it is trusted, then the VEK is checked against it and
+ * `collateral_verified` becomes `true`. Without it, revocation is skipped and
+ * `collateral_verified` stays `false` — the caller's policy layer decides
+ * whether that qualifies as verified.
+ *
+ * `min_tcb_json`, when supplied, is the minimum SNP TCB policy as
+ * [`SnpTcb`] JSON (`{ "bootloader": u8, "tee": u8, "snp": u8,
+ * "microcode": u8, "fmc"?: u8 }`); a report whose reported TCB is below any
+ * component fails closed. SNP platforms only — it is ignored by the TDX
+ * verifiers, so TDX callers must not rely on it.
  *
  * The freshness semantics of `expected_report_data` are per-platform, handled
  * inside each core verifier: for bare-metal platforms it is checked against
@@ -32,22 +46,30 @@
  * - `expected_report_data`: optional freshness anchor bytes
  * - `expected_init_data_hash`: optional init-data binding (SNP HOST_DATA /
  *   TDX MRCONFIGID / vTPM PCR[8])
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON)
+ * - `snp_crl_der`: optional DER AMD KDS CRL for the report's generation
  *
  * Returns the [`attestation::types::VerificationResult`] as JSON, or throws
  * on any check failure.
  * @param {string} envelope_json
  * @param {Uint8Array | null} [expected_report_data]
  * @param {Uint8Array | null} [expected_init_data_hash]
+ * @param {string | null} [min_tcb_json]
+ * @param {Uint8Array | null} [snp_crl_der]
  * @returns {Promise<string>}
  */
-export function verify(envelope_json, expected_report_data, expected_init_data_hash) {
+export function verify(envelope_json, expected_report_data, expected_init_data_hash, min_tcb_json, snp_crl_der) {
     const ptr0 = passStringToWasm0(envelope_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     var ptr1 = isLikeNone(expected_report_data) ? 0 : passArray8ToWasm0(expected_report_data, wasm.__wbindgen_malloc);
     var len1 = WASM_VECTOR_LEN;
     var ptr2 = isLikeNone(expected_init_data_hash) ? 0 : passArray8ToWasm0(expected_init_data_hash, wasm.__wbindgen_malloc);
     var len2 = WASM_VECTOR_LEN;
-    const ret = wasm.verify(ptr0, len0, ptr1, len1, ptr2, len2);
+    var ptr3 = isLikeNone(min_tcb_json) ? 0 : passStringToWasm0(min_tcb_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    var ptr4 = isLikeNone(snp_crl_der) ? 0 : passArray8ToWasm0(snp_crl_der, wasm.__wbindgen_malloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.verify(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
     return ret;
 }
 
@@ -60,30 +82,37 @@ export function verify(envelope_json, expected_report_data, expected_init_data_h
  * the TPM quote's `extraData` (qualifyingData), not in the SNP `report_data`
  * — the SNP `report_data` instead binds the vTPM attestation key (AK).
  *
- * Verification (mirrors the native async path, minus the CRL revocation check
- * which needs an async cert provider — so `collateral_verified` is always
- * `false` here):
+ * Verification (mirrors the native async path):
  * 1. Verify the TPM quote signature with the AK extracted from HCL var_data.
  * 2. Check the quote's `extraData` equals `expected_report_data` (freshness),
  *    failing closed when an anchor is supplied and does not match.
  * 3. Verify the PCR digest, and optionally bind PCR[8] to `expected_init_data_hash`.
  * 4. Bind the AK to the TEE: `snp.report_data[..32] == SHA-256(var_data)`.
  * 5. Validate the VCEK chain (auto-detecting the generation from CPUID) and the
- *    SNP report signature, then enforce VMPL/debug/TCB policy.
+ *    SNP report signature, then enforce VMPL/debug/TCB policy and the optional
+ *    minimum-TCB floor.
+ * 6. When `crl_der` carries the AMD KDS CRL for the matched generation, verify
+ *    its ARK signature and freshness, then check the VCEK against it —
+ *    `collateral_verified` becomes `true`. Without it, revocation is skipped
+ *    and `collateral_verified` stays `false`.
  *
  * - `evidence_json`: az-snp evidence JSON (`{ version, tpm_quote, hcl_report, vcek }`)
  * - `expected_report_data`: optional raw bytes the TPM quote `extraData` must equal
  * - `expected_init_data_hash`: optional 32-byte hash to bind against PCR[8]
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON)
+ * - `crl_der`: optional DER AMD KDS CRL for the report's generation
  *
  * Returns the verification result as JSON, or throws on any check failure.
  * @param {string} evidence_json
  * @param {Uint8Array | null} [expected_report_data]
  * @param {Uint8Array | null} [expected_init_data_hash]
+ * @param {string | null} [min_tcb_json]
+ * @param {Uint8Array | null} [crl_der]
  * @returns {string}
  */
-export function verify_az_snp(evidence_json, expected_report_data, expected_init_data_hash) {
-    let deferred5_0;
-    let deferred5_1;
+export function verify_az_snp(evidence_json, expected_report_data, expected_init_data_hash, min_tcb_json, crl_der) {
+    let deferred7_0;
+    let deferred7_1;
     try {
         const ptr0 = passStringToWasm0(evidence_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -91,18 +120,22 @@ export function verify_az_snp(evidence_json, expected_report_data, expected_init
         var len1 = WASM_VECTOR_LEN;
         var ptr2 = isLikeNone(expected_init_data_hash) ? 0 : passArray8ToWasm0(expected_init_data_hash, wasm.__wbindgen_malloc);
         var len2 = WASM_VECTOR_LEN;
-        const ret = wasm.verify_az_snp(ptr0, len0, ptr1, len1, ptr2, len2);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
+        var ptr3 = isLikeNone(min_tcb_json) ? 0 : passStringToWasm0(min_tcb_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(crl_der) ? 0 : passArray8ToWasm0(crl_der, wasm.__wbindgen_malloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.verify_az_snp(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
         if (ret[3]) {
-            ptr4 = 0; len4 = 0;
+            ptr6 = 0; len6 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
@@ -164,19 +197,47 @@ export function verify_az_tdx(evidence_json, expected_report_data, expected_init
 /**
  * Verify live SNP evidence in WASM.
  *
+ * Enforces the same endorsement-key and platform-security policy as the
+ * native SNP verifier (`platforms/snp/verify.rs`), minus only VEK fetching
+ * (the VEK must be inline). The one intentional difference from the generic
+ * [`verify`] entry point is the explicit `generation` argument: v2 reports
+ * (Azure HCL evidence unwrapped to a bare report) carry no CPUID fields to
+ * auto-detect from, so the caller declares the generation and the VEK chain
+ * check authenticates it — a wrong declaration fails its own chain.
+ *
+ * Checks, in native order: ARK → ASK/ASVK → VEK chain against the bundled
+ * roots (VLEK auto-detected), VEK validity period, optional CRL revocation,
+ * report signature, VMPL == 0, debug-policy rejection (no opt-in here; fail
+ * closed), VEK chip-id/TCB OID cross-validation against the report, and the
+ * optional minimum-TCB floor.
+ *
+ * Collateral: when `crl_der` carries the AMD KDS CRL for this generation,
+ * its signature is verified against the bundled ARK and its
+ * thisUpdate/nextUpdate window against the current time, then the VEK is
+ * checked against it and the result's `collateral_verified` is `true`.
+ * Without it, revocation is skipped and `collateral_verified` is `false` —
+ * surfaced, never silently upgraded.
+ *
  * - `evidence_json`: evidence JSON with inline cert_chain.vcek
  * - `generation`: processor generation ("milan", "genoa", "turin")
- * - `expected_report_data`: optional raw bytes to check against report_data in the report
+ * - `expected_report_data`: optional raw bytes to check against report_data
+ *   in the report (comparison reported as `report_data_match`, not fatal —
+ *   the policy layer decides)
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON); a
+ *   reported TCB below any component fails closed
+ * - `crl_der`: optional DER AMD KDS CRL for this generation
  *
  * Returns verification result as JSON.
  * @param {string} evidence_json
  * @param {string} generation
  * @param {Uint8Array | null} [expected_report_data]
+ * @param {string | null} [min_tcb_json]
+ * @param {Uint8Array | null} [crl_der]
  * @returns {string}
  */
-export function verify_snp(evidence_json, generation, expected_report_data) {
-    let deferred5_0;
-    let deferred5_1;
+export function verify_snp(evidence_json, generation, expected_report_data, min_tcb_json, crl_der) {
+    let deferred7_0;
+    let deferred7_1;
     try {
         const ptr0 = passStringToWasm0(evidence_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -184,18 +245,22 @@ export function verify_snp(evidence_json, generation, expected_report_data) {
         const len1 = WASM_VECTOR_LEN;
         var ptr2 = isLikeNone(expected_report_data) ? 0 : passArray8ToWasm0(expected_report_data, wasm.__wbindgen_malloc);
         var len2 = WASM_VECTOR_LEN;
-        const ret = wasm.verify_snp(ptr0, len0, ptr1, len1, ptr2, len2);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
+        var ptr3 = isLikeNone(min_tcb_json) ? 0 : passStringToWasm0(min_tcb_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(crl_der) ? 0 : passArray8ToWasm0(crl_der, wasm.__wbindgen_malloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.verify_snp(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
         if (ret[3]) {
-            ptr4 = 0; len4 = 0;
+            ptr6 = 0; len6 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
@@ -352,7 +417,7 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 380, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 392, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h930b9d8ef23db674);
             return ret;
         },

@@ -1,44 +1,25 @@
-export declare const MLKEM768_EK_BYTES = 1184;
-export declare const MLKEM768_CT_BYTES = 1088;
-export declare const X25519_PUB_BYTES = 32;
-/** Raw public halves of the LB's hybrid key. */
-export interface PublicHalves {
-    x25519: Uint8Array;
-    mlkem768: Uint8Array;
-}
-/** The client's contribution sent to the LB to complete the handshake. */
-export interface Handshake {
-    clientX25519: Uint8Array;
-    mlkemCiphertext: Uint8Array;
-}
-/** Server-side (LB) private key handles. */
-export interface ServerKeys {
-    x25519Priv: CryptoKey;
-    mlkemPriv: CryptoKey;
-}
+import { type Channel, type ChannelRole } from "./channel.js";
+export { XWING_EK_BYTES, XWING_CT_BYTES, XWING_SS_BYTES, generateXWingKeyPair, xwingKeyPairFromSeed, xwingDecapsulate, xwingEncapsulate, } from "./xwing.js";
+export type { XWingKeyPair } from "./xwing.js";
 /**
- * Client side: encapsulate against the LB's attested hybrid public key and derive
- * the session key.
+ * Derive the full channel key schedule and assemble this end's Channel.
  *
- * @param peerPub raw public halves
- * @param identityTranscript verified identity transcript hash
+ * @param role which end this is: the browser client, or the server half used
+ *   by the mock LB and tests
+ * @param sharedSecret 32-byte X-Wing shared secret
+ * @param identityTranscript verified 48-byte identity transcript hash (salt)
+ * @param sessionId 16-byte session id, committed by the transcript
  */
-export declare function clientKeyAgreement(peerPub: PublicHalves, identityTranscript: Uint8Array): Promise<{
-    key: CryptoKey;
-    handshake: Handshake;
-}>;
+export declare function deriveChannel(role: ChannelRole, sharedSecret: Uint8Array, identityTranscript: Uint8Array, sessionId: Uint8Array): Promise<Channel>;
 /**
- * LB / server side: decapsulate the client's ciphertext and ECDH against the
- * client's X25519 public key to derive the same session key. Used by the mock LB
- * and by tests.
+ * Derive the raw key-schedule outputs without importing them into AEAD
+ * handles. For the interoperability-vector tests, which compare the bytes.
  */
-export declare function serverKeyAgreement(serverKeys: ServerKeys, handshake: Handshake, identityTranscript: Uint8Array): Promise<CryptoKey>;
-/**
- * Generate a fresh LB-side hybrid keypair and return both the private handles and
- * the raw public halves to publish. Used by the mock LB.
- */
-export declare function generateServerHybridKey(): Promise<{
-    priv: ServerKeys;
-    pub: PublicHalves;
+export declare function deriveRawKeySchedule(sharedSecret: Uint8Array, identityTranscript: Uint8Array): Promise<{
+    c2sKey: Uint8Array;
+    s2cKey: Uint8Array;
+    c2sIv: Uint8Array;
+    s2cIv: Uint8Array;
+    exporter: Uint8Array;
 }>;
 //# sourceMappingURL=keyagreement.d.ts.map

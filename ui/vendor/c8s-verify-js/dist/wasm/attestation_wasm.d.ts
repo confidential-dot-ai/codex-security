@@ -17,11 +17,25 @@
  *
  * Runs in offline mode ([`attestation::Verifier::offline`]): quote signatures
  * and cert chains verify against the bundled AMD/Intel roots (SNP evidence
- * must carry its VEK inline, as c8s evidence does), the SNP processor
- * generation is auto-detected from the report's CPUID fields (v3+ reports),
- * and the network-backed collateral checks (PCK CRL, TCB status, QE identity)
- * are skipped — `collateral_verified` stays `false`. Debug guests are always
- * rejected (`allow_debug` is never exposed to the browser; fail closed).
+ * must carry its VEK inline, as c8s evidence does), and the SNP processor
+ * generation is auto-detected from the report's CPUID fields (v3+ reports).
+ * Debug guests are always rejected (`allow_debug` is never exposed to the
+ * browser; fail closed).
+ *
+ * Collateral: the TDX network-backed checks (PCK CRL, TCB status, QE
+ * identity) need an async provider and are skipped. For SNP, the caller may
+ * staple the AMD KDS CRL as `snp_crl_der` — its signature is verified against
+ * the bundled ARK and its thisUpdate/nextUpdate window against the current
+ * time before it is trusted, then the VEK is checked against it and
+ * `collateral_verified` becomes `true`. Without it, revocation is skipped and
+ * `collateral_verified` stays `false` — the caller's policy layer decides
+ * whether that qualifies as verified.
+ *
+ * `min_tcb_json`, when supplied, is the minimum SNP TCB policy as
+ * [`SnpTcb`] JSON (`{ "bootloader": u8, "tee": u8, "snp": u8,
+ * "microcode": u8, "fmc"?: u8 }`); a report whose reported TCB is below any
+ * component fails closed. SNP platforms only — it is ignored by the TDX
+ * verifiers, so TDX callers must not rely on it.
  *
  * The freshness semantics of `expected_report_data` are per-platform, handled
  * inside each core verifier: for bare-metal platforms it is checked against
@@ -33,11 +47,13 @@
  * - `expected_report_data`: optional freshness anchor bytes
  * - `expected_init_data_hash`: optional init-data binding (SNP HOST_DATA /
  *   TDX MRCONFIGID / vTPM PCR[8])
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON)
+ * - `snp_crl_der`: optional DER AMD KDS CRL for the report's generation
  *
  * Returns the [`attestation::types::VerificationResult`] as JSON, or throws
  * on any check failure.
  */
-export function verify(envelope_json: string, expected_report_data?: Uint8Array | null, expected_init_data_hash?: Uint8Array | null): Promise<string>;
+export function verify(envelope_json: string, expected_report_data?: Uint8Array | null, expected_init_data_hash?: Uint8Array | null, min_tcb_json?: string | null, snp_crl_der?: Uint8Array | null): Promise<string>;
 
 /**
  * Verify Azure SEV-SNP (az-snp) vTPM attestation evidence in WASM.
@@ -48,24 +64,29 @@ export function verify(envelope_json: string, expected_report_data?: Uint8Array 
  * the TPM quote's `extraData` (qualifyingData), not in the SNP `report_data`
  * — the SNP `report_data` instead binds the vTPM attestation key (AK).
  *
- * Verification (mirrors the native async path, minus the CRL revocation check
- * which needs an async cert provider — so `collateral_verified` is always
- * `false` here):
+ * Verification (mirrors the native async path):
  * 1. Verify the TPM quote signature with the AK extracted from HCL var_data.
  * 2. Check the quote's `extraData` equals `expected_report_data` (freshness),
  *    failing closed when an anchor is supplied and does not match.
  * 3. Verify the PCR digest, and optionally bind PCR[8] to `expected_init_data_hash`.
  * 4. Bind the AK to the TEE: `snp.report_data[..32] == SHA-256(var_data)`.
  * 5. Validate the VCEK chain (auto-detecting the generation from CPUID) and the
- *    SNP report signature, then enforce VMPL/debug/TCB policy.
+ *    SNP report signature, then enforce VMPL/debug/TCB policy and the optional
+ *    minimum-TCB floor.
+ * 6. When `crl_der` carries the AMD KDS CRL for the matched generation, verify
+ *    its ARK signature and freshness, then check the VCEK against it —
+ *    `collateral_verified` becomes `true`. Without it, revocation is skipped
+ *    and `collateral_verified` stays `false`.
  *
  * - `evidence_json`: az-snp evidence JSON (`{ version, tpm_quote, hcl_report, vcek }`)
  * - `expected_report_data`: optional raw bytes the TPM quote `extraData` must equal
  * - `expected_init_data_hash`: optional 32-byte hash to bind against PCR[8]
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON)
+ * - `crl_der`: optional DER AMD KDS CRL for the report's generation
  *
  * Returns the verification result as JSON, or throws on any check failure.
  */
-export function verify_az_snp(evidence_json: string, expected_report_data?: Uint8Array | null, expected_init_data_hash?: Uint8Array | null): string;
+export function verify_az_snp(evidence_json: string, expected_report_data?: Uint8Array | null, expected_init_data_hash?: Uint8Array | null, min_tcb_json?: string | null, crl_der?: Uint8Array | null): string;
 
 /**
  * Verify Azure TDX (az-tdx) vTPM attestation evidence in WASM.
@@ -112,13 +133,39 @@ export function verify_az_tdx(evidence_json: string, expected_report_data?: Uint
 /**
  * Verify live SNP evidence in WASM.
  *
+ * Enforces the same endorsement-key and platform-security policy as the
+ * native SNP verifier (`platforms/snp/verify.rs`), minus only VEK fetching
+ * (the VEK must be inline). The one intentional difference from the generic
+ * [`verify`] entry point is the explicit `generation` argument: v2 reports
+ * (Azure HCL evidence unwrapped to a bare report) carry no CPUID fields to
+ * auto-detect from, so the caller declares the generation and the VEK chain
+ * check authenticates it — a wrong declaration fails its own chain.
+ *
+ * Checks, in native order: ARK → ASK/ASVK → VEK chain against the bundled
+ * roots (VLEK auto-detected), VEK validity period, optional CRL revocation,
+ * report signature, VMPL == 0, debug-policy rejection (no opt-in here; fail
+ * closed), VEK chip-id/TCB OID cross-validation against the report, and the
+ * optional minimum-TCB floor.
+ *
+ * Collateral: when `crl_der` carries the AMD KDS CRL for this generation,
+ * its signature is verified against the bundled ARK and its
+ * thisUpdate/nextUpdate window against the current time, then the VEK is
+ * checked against it and the result's `collateral_verified` is `true`.
+ * Without it, revocation is skipped and `collateral_verified` is `false` —
+ * surfaced, never silently upgraded.
+ *
  * - `evidence_json`: evidence JSON with inline cert_chain.vcek
  * - `generation`: processor generation ("milan", "genoa", "turin")
- * - `expected_report_data`: optional raw bytes to check against report_data in the report
+ * - `expected_report_data`: optional raw bytes to check against report_data
+ *   in the report (comparison reported as `report_data_match`, not fatal —
+ *   the policy layer decides)
+ * - `min_tcb_json`: optional minimum SNP TCB policy ([`SnpTcb`] JSON); a
+ *   reported TCB below any component fails closed
+ * - `crl_der`: optional DER AMD KDS CRL for this generation
  *
  * Returns verification result as JSON.
  */
-export function verify_snp(evidence_json: string, generation: string, expected_report_data?: Uint8Array | null): string;
+export function verify_snp(evidence_json: string, generation: string, expected_report_data?: Uint8Array | null, min_tcb_json?: string | null, crl_der?: Uint8Array | null): string;
 
 /**
  * Verify bare-metal Intel TDX (tdx) DCAP attestation evidence in WASM.
@@ -179,10 +226,10 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly verify: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-    readonly verify_az_snp: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => any;
+    readonly verify_az_snp: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly verify_az_tdx: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-    readonly verify_snp: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly verify_snp: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly verify_tdx: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => any;
     readonly wasm_bindgen__convert__closures_____invoke__h930b9d8ef23db674: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1c005da840836e19: (a: number, b: number, c: any, d: any) => void;

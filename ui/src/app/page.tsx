@@ -5,7 +5,6 @@ import { Verdict } from "@/components/verdict";
 import { PinsCard } from "@/components/pins-card";
 import { DeploymentCard } from "@/components/deployment-card";
 import { References } from "@/components/references";
-import { Limits } from "@/components/limits";
 
 export default function TrustPage() {
   return (
@@ -18,7 +17,6 @@ export default function TrustPage() {
         <PinsCard />
         <DeploymentCard />
       </div>
-      <Limits />
       <References />
     </main>
   );

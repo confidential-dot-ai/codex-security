@@ -25,6 +25,24 @@ function errMessage(e) {
     return String(e?.message ?? e);
 }
 /**
+ * The SNP verifiers fail closed (throw) when the reported TCB is below the
+ * supplied floor. Recognise that throw by message so it surfaces as the
+ * precise `tcb_denied` code — a caller telling "unpatched platform" apart
+ * from "broken evidence" needs the codes to differ.
+ */
+function isTcbBelowFloor(e) {
+    return /below minimum/i.test(errMessage(e));
+}
+/**
+ * A supplied CRL that fails any of its own checks (signature, freshness,
+ * parse) or names the VEK throws inside the verifier. Recognise it so the
+ * failure surfaces as `collateral_denied` rather than the generic
+ * `verification_failed` used for chain and signature failures.
+ */
+function isCollateralFailure(e) {
+    return /CRL check|revoked/i.test(errMessage(e));
+}
+/**
  * The TDX platform family, as c8s's `ratls.NormalizePlatform` defines it: the
  * bare-metal tag and the cloud-prefixed ones name one TEE, so every TDX-only
  * policy rule applies to all of them.
@@ -46,6 +64,86 @@ function isTdxPlatform(platform) {
 }
 /** How the TDX-only policy rules name the platforms they accept. */
 const TDX_PLATFORM_LIST = [...TDX_PLATFORMS].map((p) => JSON.stringify(p)).join(" | ");
+/**
+ * The platforms this library's SNP-only policy rules (minTcb, snpCrl,
+ * requireCollateral) apply to — the two SNP routing tags the verifier
+ * dispatches on.
+ */
+const SNP_PLATFORMS = new Set(["snp", "az-snp"]);
+/** How the SNP-only policy rules name the platforms they accept. */
+const SNP_PLATFORM_LIST = [...SNP_PLATFORMS].map((p) => JSON.stringify(p)).join(" | ");
+/** An SPL component: an integer in a u8's range. */
+function isSpl(v) {
+    return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 255;
+}
+/**
+ * Validate the SNP collateral/TCB policy fields shared by
+ * {@link VerifyPolicy} and {@link VerifyEvidenceOptions}, failing closed on
+ * any pin the verifier could not enforce.
+ */
+function validateSnpPolicy(platform, minTcb, snpCrl, requireCollateral) {
+    const isSnp = SNP_PLATFORMS.has(platform.trim().toLowerCase());
+    if (minTcb !== undefined) {
+        if (!isSnp) {
+            fail("invalid_request", `minTcb requires an SNP platform (${SNP_PLATFORM_LIST}; got ${JSON.stringify(platform)}): the SEV-SNP TCB floor has no meaning elsewhere, so the pin could not be enforced`);
+        }
+        const { bootloader, tee, snp, microcode, fmc } = minTcb;
+        if (!isSpl(bootloader) ||
+            !isSpl(tee) ||
+            !isSpl(snp) ||
+            !isSpl(microcode) ||
+            (fmc !== undefined && !isSpl(fmc))) {
+            fail("invalid_request", "minTcb components (bootloader, tee, snp, microcode, and optional fmc) must each be an integer 0–255");
+        }
+    }
+    if (snpCrl !== undefined) {
+        if (!isSnp) {
+            fail("invalid_request", `snpCrl requires an SNP platform (${SNP_PLATFORM_LIST}; got ${JSON.stringify(platform)}): the AMD KDS CRL vouches for SNP endorsement keys only`);
+        }
+        if (!(snpCrl instanceof Uint8Array) || snpCrl.length === 0) {
+            fail("invalid_request", "snpCrl must be the non-empty DER bytes of the AMD KDS CRL");
+        }
+    }
+    if (requireCollateral) {
+        if (!isSnp) {
+            fail("invalid_request", `requireCollateral requires an SNP platform (${SNP_PLATFORM_LIST}; got ${JSON.stringify(platform)}): the browser verifier has no TDX collateral path, so the requirement could never be met`);
+        }
+        if (snpCrl === undefined) {
+            fail("invalid_request", "requireCollateral is set but no snpCrl is supplied: the verifier has no collateral to verify, so the requirement could never be met — fetch the AMD KDS CRL and pass it as snpCrl");
+        }
+    }
+}
+/** Serialize a validated minTcb to the SnpTcb JSON the WASM verifier takes. */
+function minTcbJson(minTcb) {
+    if (minTcb === undefined)
+        return undefined;
+    const { bootloader, tee, snp, microcode, fmc } = minTcb;
+    return JSON.stringify({ bootloader, tee, snp, microcode, ...(fmc !== undefined ? { fmc } : {}) });
+}
+/**
+ * Enforce the collateral outcome against the policy, using the VERIFIED
+ * result as the source of truth: a supplied CRL (or an explicit
+ * requireCollateral) demands `collateral_verified === true` — a verifier
+ * build that silently dropped the argument must never read as verified.
+ * Returns whether collateral was verified; when it was not and the policy
+ * tolerates that, the gap is surfaced as a warning instead.
+ */
+function enforceCollateralPolicy(result, platform, snpCrl, requireCollateral, warnings) {
+    const verified = result.collateral_verified === true;
+    if (verified)
+        return true;
+    if (snpCrl !== undefined || requireCollateral) {
+        fail("collateral_required", "revocation collateral was not verified (no collateral_verified in the result) — refusing to report a collateral policy that was never enforced");
+    }
+    warnings.push(SNP_PLATFORMS.has(platform.trim().toLowerCase())
+        ? "endorsement-key revocation was not checked: no snpCrl supplied, so an AMD-revoked " +
+            "VEK would still verify. Fetch the AMD KDS CRL for the deployment's generation and " +
+            "pass it as snpCrl (and set requireCollateral in production policy)"
+        : "DCAP collateral (PCK CRL, TCB status, QE identity) was not checked: the browser " +
+            "verifier has no TDX collateral path; use the native verifier where revocation " +
+            "must be part of the verdict");
+    return false;
+}
 /** The TDX verifier reports the registers under claims.platform_data. */
 function rtmrFromClaims(result, idx) {
     const pd = result.claims.platform_data;
@@ -172,6 +270,7 @@ function validatePolicy(policy) {
         }
         requireTdxImage("tdxImage", policy.tdxImage);
     }
+    validateSnpPolicy(policy.platform ?? "snp", policy.minTcb, policy.snpCrl, policy.requireCollateral);
 }
 /** Decode a 96-hex-char RTMR[3] pin. Callers validate the shape first. */
 function decodeRtmr3(hex) {
@@ -180,11 +279,12 @@ function decodeRtmr3(hex) {
         out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     return out;
 }
-function decodeSessionPublicKey(bundle, nonce) {
+function decodeKeyExchange(bundle, nonce, expectedEk) {
     if (typeof bundle?.nonce !== "string" ||
-        typeof bundle?.session_pubkey?.x25519 !== "string" ||
-        typeof bundle?.session_pubkey?.mlkem768 !== "string") {
-        fail("invalid_request", "attestation bundle is missing nonce or session_pubkey fields");
+        typeof bundle?.xwing_ek !== "string" ||
+        typeof bundle?.xwing_ct !== "string" ||
+        typeof bundle?.session_id !== "string") {
+        fail("invalid_request", "attestation bundle is missing nonce, xwing_ek, xwing_ct, or session_id fields");
     }
     let echoed;
     try {
@@ -196,15 +296,24 @@ function decodeSessionPublicKey(bundle, nonce) {
     if (!constantTimeEqual(echoed, nonce)) {
         fail("nonce_mismatch", "attestation bundle nonce does not match the nonce we sent");
     }
+    let decoded;
     try {
-        return {
-            x25519: base64UrlToBytes(bundle.session_pubkey.x25519),
-            mlkem768: base64UrlToBytes(bundle.session_pubkey.mlkem768),
+        decoded = {
+            xwingEk: base64UrlToBytes(bundle.xwing_ek),
+            xwingCt: base64UrlToBytes(bundle.xwing_ct),
+            sessionId: base64UrlToBytes(bundle.session_id),
         };
     }
     catch (cause) {
-        fail("invalid_request", "attestation bundle session_pubkey is not base64url", { cause });
+        fail("invalid_request", "attestation bundle key-exchange fields are not base64url", { cause });
     }
+    // Exactly like the nonce echo: a live client sent its own encapsulation key
+    // and must see it committed, or the evidence speaks for someone else's
+    // exchange. Offline re-verification of a saved bundle passes undefined.
+    if (expectedEk !== undefined && !constantTimeEqual(decoded.xwingEk, expectedEk)) {
+        fail("key_binding", "attestation bundle xwing_ek does not echo the key we sent");
+    }
+    return decoded;
 }
 function isMeshIdentityProof(proof) {
     return (proof !== undefined &&
@@ -213,19 +322,12 @@ function isMeshIdentityProof(proof) {
         typeof proof.mesh_ca_sha256 === "string" &&
         typeof proof.signature === "string");
 }
-async function prepareIdentity(bundle, sessionPubKey, nonce, policy, warnings) {
+async function prepareIdentity(bundle, keyExchange, nonce, policy, warnings) {
     // Exactly the attest-pq binding id: an attest-lb response (native-client
     // sibling protocol) or a stale pre-cutover c8s-verify/v1 bundle carries
     // otherwise-valid evidence for a DIFFERENT trust decision, so both are
     // rejected here rather than adapted to.
-    // command-a-demo vendored build: the demo cluster's pinned LB predates the
-    // #199 endpoint rename, so it answers the shimmed route with the retired
-    // "c8s-verify/v1" bundle id. Accept it alongside BINDING_ATTEST_PQ: the
-    // identity-transcript domain tag (TRANSCRIPT_DOMAIN_TAG) is unchanged between
-    // the two, so every cryptographic check below — DCAP chain, measurements,
-    // report_data session binding, mesh-leaf proof of possession — is enforced
-    // exactly as for a current endpoint. Only the version gate is relaxed.
-    if (bundle?.version !== BINDING_ATTEST_PQ && bundle?.version !== "c8s-verify/v1") {
+    if (bundle?.version !== BINDING_ATTEST_PQ) {
         fail("identity_binding", `attestation response has version ${JSON.stringify(bundle?.version)}, ` +
             `want ${BINDING_ATTEST_PQ}`);
     }
@@ -234,6 +336,9 @@ async function prepareIdentity(bundle, sessionPubKey, nonce, policy, warnings) {
     }
     if (typeof bundle.cds_cert_pem !== "string" || bundle.cds_cert_pem.trim() === "") {
         fail("identity_binding", "attestation response omitted cds_cert_pem");
+    }
+    if (typeof bundle.front_door_mode !== "string" || bundle.front_door_mode === "") {
+        fail("identity_binding", "attestation response omitted front_door_mode");
     }
     const leafBlocks = decodePEM(bundle.cds_cert_pem, "CERTIFICATE");
     if (leafBlocks.length === 0) {
@@ -274,10 +379,10 @@ async function prepareIdentity(bundle, sessionPubKey, nonce, policy, warnings) {
         }
     }
     const chain = await verifyCertChain(leafBlocks[0], selectedCA, { at: policy.at });
-    const transcript = await identityTranscriptHash(sessionPubKey, nonce, chain.leaf.der, chain.ca.der, bundle.front_door_mode);
-    return { chain, proof: bundle.identity_proof, transcript };
+    const transcript = await identityTranscriptHash(bundle.front_door_mode, keyExchange.xwingEk, keyExchange.xwingCt, keyExchange.sessionId, nonce, chain.leaf.der, chain.ca.der);
+    return { chain, proof: bundle.identity_proof, transcript, frontDoorMode: bundle.front_door_mode };
 }
-async function verifyHardwareAttestation(bundle, expected, wantPlatform, requireFreshness, pinnedGeneration, expectedRtmr3) {
+async function verifyHardwareAttestation(bundle, expected, wantPlatform, requireFreshness, pinnedGeneration, expectedRtmr3, minTcb, snpCrl) {
     // The Azure vTPM platforms (az-snp, az-tdx) get full verification (HCL report
     // + vTPM quote + hardware quote), with the transcript checked against the TPM
     // quote's extraData. Bare tdx verifies the TD quote + DCAP chain directly,
@@ -306,14 +411,15 @@ async function verifyHardwareAttestation(bundle, expected, wantPlatform, require
     let result;
     try {
         let out;
+        const tcbFloor = minTcbJson(minTcb);
         if (isAzSnp)
-            out = await verifyAzSnp(JSON.stringify(bundle.evidence), hardAnchor);
+            out = await verifyAzSnp(JSON.stringify(bundle.evidence), hardAnchor, undefined, tcbFloor, snpCrl);
         else if (isAzTdx)
             out = await verifyAzTdx(JSON.stringify(bundle.evidence), hardAnchor);
         else if (isTdx)
             out = await verifyTdx(JSON.stringify(bundle.evidence), hardAnchor, undefined, expectedRtmr3);
         else
-            out = await verifySnp(bundle.evidence, pinnedGeneration ?? bundle.generation, expected);
+            out = await verifySnp(bundle.evidence, pinnedGeneration ?? bundle.generation, expected, tcbFloor, snpCrl);
         result = JSON.parse(out);
     }
     catch (e) {
@@ -322,6 +428,14 @@ async function verifyHardwareAttestation(bundle, expected, wantPlatform, require
         }
         if (expectedRtmr3 !== undefined && isRtmr3Mismatch(e)) {
             fail("rtmr3_denied", "RTMR[3] does not match the pinned value: this is a genuine TEE, but not the deployment the pin was taken from", { details: { expected: bytesToHex(expectedRtmr3) }, cause: e });
+        }
+        if (minTcb !== undefined && isTcbBelowFloor(e)) {
+            fail("tcb_denied", "reported SNP TCB is below the pinned minimum: genuine silicon, but platform firmware older than the policy floor", { details: { minTcb }, cause: e });
+        }
+        if (snpCrl !== undefined && isCollateralFailure(e)) {
+            fail("collateral_denied", `endorsement-key collateral check failed: ${errMessage(e)}`, {
+                cause: e,
+            });
         }
         fail("verification_failed", `hardware attestation failed: ${errMessage(e)}`, { cause: e });
     }
@@ -418,15 +532,20 @@ async function verifyWorkloadPolicy(leaf, policy) {
  *
  * @param bundle the LB attest-pq response
  * @param nonce the nonce WE generated and sent
+ * @param policy the verification policy
+ * @param expectedXwingEk the X-Wing encapsulation key WE sent; the bundle must
+ *   echo it exactly. Omit only when re-verifying a saved bundle offline, where
+ *   the result is not a freshness or key-binding proof for this caller.
  */
-export async function verifyAttestation(bundle, nonce, policy) {
+export async function verifyAttestation(bundle, nonce, policy, expectedXwingEk) {
     validatePolicy(policy);
     const warnings = [];
     const wantPlatform = policy.platform ?? "snp";
     const requireFreshness = policy.requireFreshness !== false;
-    const sessionPubKey = decodeSessionPublicKey(bundle, nonce);
-    const identity = await prepareIdentity(bundle, sessionPubKey, nonce, policy, warnings);
-    const result = await verifyHardwareAttestation(bundle, identity.transcript, wantPlatform, requireFreshness, policy.generation, policy.expectedRtmr3 === undefined ? undefined : decodeRtmr3(policy.expectedRtmr3));
+    const keyExchange = decodeKeyExchange(bundle, nonce, expectedXwingEk);
+    const identity = await prepareIdentity(bundle, keyExchange, nonce, policy, warnings);
+    const result = await verifyHardwareAttestation(bundle, identity.transcript, wantPlatform, requireFreshness, policy.generation, policy.expectedRtmr3 === undefined ? undefined : decodeRtmr3(policy.expectedRtmr3), policy.minTcb, policy.snpCrl);
+    const collateralVerified = enforceCollateralPolicy(result, wantPlatform, policy.snpCrl, policy.requireCollateral, warnings);
     // The image tuple's MRTD is an accepted launch digest alongside the
     // explicit allowlist; RTMR[1]/[2] are compared exactly below.
     const measurement = verifyMeasurement(result, policy.tdxImage === undefined
@@ -474,8 +593,10 @@ export async function verifyAttestation(bundle, nonce, policy) {
         reportVersion: result.report_version ?? 0,
         reportDataMatch: result.report_data_match,
         identityBound: result.report_data_match === true,
+        collateralVerified,
         keyAgreementContext: identity.transcript,
-        sessionPubKey,
+        keyExchange,
+        frontDoorMode: identity.frontDoorMode,
         cert: certInfo(identity.chain),
         claims: result.claims,
         workload,
@@ -542,19 +663,21 @@ export async function verifyEvidence(evidence, opts) {
         }
         requireTdxImage("tdxImage", opts.tdxImage);
     }
+    validateSnpPolicy(wantPlatform, opts.minTcb, opts.snpCrl, opts.requireCollateral);
     const expected = opts.expectedReportData;
     // Hardware attestation via WASM (throws on VCEK chain / report signature failure).
     let result;
     try {
         let out;
+        const tcbFloor = minTcbJson(opts.minTcb);
         if (isAzSnp)
-            out = await verifyAzSnp(JSON.stringify(evidence), expected);
+            out = await verifyAzSnp(JSON.stringify(evidence), expected, undefined, tcbFloor, opts.snpCrl);
         else if (isAzTdx)
             out = await verifyAzTdx(JSON.stringify(evidence), expected);
         else if (isTdx)
             out = await verifyTdx(JSON.stringify(evidence), expected, undefined, wantRtmr3);
         else
-            out = await verifySnp(evidence, opts.generation, expected);
+            out = await verifySnp(evidence, opts.generation, expected, tcbFloor, opts.snpCrl);
         result = JSON.parse(out);
     }
     catch (e) {
@@ -567,6 +690,14 @@ export async function verifyEvidence(evidence, opts) {
         if ((isVtpm || isTdx) && expected !== undefined && isFreshnessMismatch(e)) {
             fail("report_data_mismatch", "report_data does not match the expected binding (stale or substituted evidence)", { details: { expected: bytesToHex(expected) }, cause: e });
         }
+        if (opts.minTcb !== undefined && isTcbBelowFloor(e)) {
+            fail("tcb_denied", "reported SNP TCB is below the pinned minimum: genuine silicon, but platform firmware older than the policy floor", { details: { minTcb: opts.minTcb }, cause: e });
+        }
+        if (opts.snpCrl !== undefined && isCollateralFailure(e)) {
+            fail("collateral_denied", `endorsement-key collateral check failed: ${errMessage(e)}`, {
+                cause: e,
+            });
+        }
         fail("verification_failed", `hardware attestation failed: ${errMessage(e)}`, { cause: e });
     }
     if (result.signature_valid !== true) {
@@ -575,6 +706,7 @@ export async function verifyEvidence(evidence, opts) {
     if (result.platform !== wantPlatform) {
         fail("verification_failed", `unexpected platform ${result.platform}, want ${wantPlatform}`);
     }
+    const collateralVerified = enforceCollateralPolicy(result, wantPlatform, opts.snpCrl, opts.requireCollateral, warnings);
     // Same reasoning as verifyAttestation: on bare TDX the WASM entry point
     // throws on a mismatch, but an older or substituted verifier build that
     // ignored the argument would return a valid-looking result with the field
@@ -631,6 +763,7 @@ export async function verifyEvidence(evidence, opts) {
         measurement,
         reportVersion: result.report_version ?? 0,
         reportDataMatch: result.report_data_match,
+        collateralVerified,
         claims: result.claims,
         ...(rtmrsPinned.length > 0 ? { rtmrsPinned } : {}),
         warnings,

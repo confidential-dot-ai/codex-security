@@ -3,6 +3,8 @@ import { base64UrlToBytes, bytesToBase64Url, concatBytes, constantTimeEqual, utf
 import { C8sVerifyError, fail } from "./errors.js";
 import { NONCE_BYTES } from "./nonce.js";
 import { verifyECDSASignature } from "./x509.js";
+import { XWING_CT_BYTES, XWING_EK_BYTES } from "./xwing.js";
+import { SESSION_ID_BYTES } from "./channel.js";
 /**
  * Binding identifier of the `attest-pq` response bundle. Each endpoint's
  * response carries its own identifier and a client requires the one selected
@@ -32,14 +34,23 @@ async function sha256(input) {
     return new Uint8Array(await subtle().digest("SHA-256", input));
 }
 /**
- * Compute the v1 report_data transcript shared with c8s/pkg/overenc.
+ * Compute the v1 report_data transcript shared with c8s/pkg/overenc. It
+ * commits the front-door mode and the complete key exchange — the client's
+ * X-Wing encapsulation key, the server's ciphertext, the session id, and the
+ * nonce — plus the exact mesh leaf and issuing mesh CA.
  */
-export async function identityTranscriptHash(pub, nonce, leafDer, caDer, mode) {
-    if (pub.x25519.length !== 32) {
-        fail("key_binding", `identity transcript X25519 key must be 32 bytes, got ${pub.x25519.length}`);
+export async function identityTranscriptHash(frontDoorMode, xwingEk, xwingCt, sessionId, nonce, leafDer, caDer) {
+    if (frontDoorMode === "") {
+        fail("identity_binding", "identity transcript requires a front-door mode");
     }
-    if (pub.mlkem768.length !== 1184) {
-        fail("key_binding", `identity transcript ML-KEM key must be 1184 bytes, got ${pub.mlkem768.length}`);
+    if (xwingEk.length !== XWING_EK_BYTES) {
+        fail("key_binding", `identity transcript X-Wing key must be ${XWING_EK_BYTES} bytes, got ${xwingEk.length}`);
+    }
+    if (xwingCt.length !== XWING_CT_BYTES) {
+        fail("key_binding", `identity transcript X-Wing ciphertext must be ${XWING_CT_BYTES} bytes, got ${xwingCt.length}`);
+    }
+    if (sessionId.length !== SESSION_ID_BYTES) {
+        fail("key_binding", `identity transcript session id must be ${SESSION_ID_BYTES} bytes, got ${sessionId.length}`);
     }
     if (nonce.length !== NONCE_BYTES) {
         fail("identity_binding", `identity-bound PQ requires a ${NONCE_BYTES}-byte nonce, got ${nonce.length}`);
@@ -48,7 +59,7 @@ export async function identityTranscriptHash(pub, nonce, leafDer, caDer, mode) {
         fail("identity_binding", "identity transcript requires leaf and CA certificates");
     }
     // Most-stable fields first so a signer can reuse the hash state across sessions.
-    const encoded = concatBytes(lengthPrefixed(TRANSCRIPT_DOMAIN), ...(mode ? [lengthPrefixed(utf8ToBytes(mode))] : []), lengthPrefixed(await sha256(caDer)), lengthPrefixed(await sha256(leafDer)), lengthPrefixed(pub.x25519), lengthPrefixed(pub.mlkem768), lengthPrefixed(nonce));
+    const encoded = concatBytes(lengthPrefixed(TRANSCRIPT_DOMAIN), lengthPrefixed(utf8ToBytes(frontDoorMode)), lengthPrefixed(await sha256(caDer)), lengthPrefixed(await sha256(leafDer)), lengthPrefixed(xwingEk), lengthPrefixed(xwingCt), lengthPrefixed(sessionId), lengthPrefixed(nonce));
     return new Uint8Array(await subtle().digest("SHA-384", encoded));
 }
 /** Reject anything that is not a SHA-384 transcript hash. */

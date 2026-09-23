@@ -1,10 +1,10 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export const verify: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-export const verify_az_snp: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => any;
+export const verify_az_snp: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const verify_az_tdx: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-export const verify_snp: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const verify_snp: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const verify_tdx: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => any;
 export const wasm_bindgen__convert__closures_____invoke__h930b9d8ef23db674: (a: number, b: number, c: any) => [number, number];
 export const wasm_bindgen__convert__closures_____invoke__h1c005da840836e19: (a: number, b: number, c: any, d: any) => void;

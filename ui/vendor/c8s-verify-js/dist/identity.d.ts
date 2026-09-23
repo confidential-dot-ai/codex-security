@@ -1,5 +1,4 @@
 import { type Certificate } from "./x509.js";
-import type { PublicHalves } from "./keyagreement.js";
 /**
  * Binding identifier of the `attest-pq` response bundle. Each endpoint's
  * response carries its own identifier and a client requires the one selected
@@ -25,9 +24,12 @@ export interface MeshIdentityProof {
     signature: string;
 }
 /**
- * Compute the v1 report_data transcript shared with c8s/pkg/overenc.
+ * Compute the v1 report_data transcript shared with c8s/pkg/overenc. It
+ * commits the front-door mode and the complete key exchange — the client's
+ * X-Wing encapsulation key, the server's ciphertext, the session id, and the
+ * nonce — plus the exact mesh leaf and issuing mesh CA.
  */
-export declare function identityTranscriptHash(pub: PublicHalves, nonce: Uint8Array, leafDer: Uint8Array, caDer: Uint8Array, mode?: string): Promise<Uint8Array>;
+export declare function identityTranscriptHash(frontDoorMode: string, xwingEk: Uint8Array, xwingCt: Uint8Array, sessionId: Uint8Array, nonce: Uint8Array, leafDer: Uint8Array, caDer: Uint8Array): Promise<Uint8Array>;
 /** Reject anything that is not a SHA-384 transcript hash. */
 export declare function assertTranscriptLength(transcriptHash: Uint8Array): void;
 /**

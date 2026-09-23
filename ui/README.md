@@ -98,6 +98,17 @@ The library is vendored rather than depended on from a registry because it is
 not published to npm and its git tree ships no build output; the WASM verifier
 is built from Rust. `vendor/c8s-verify-js/LICENSE` travels with it.
 
+Vendored at `c8s-verify-js` `d589419` (client-first X-Wing key exchange), built
+with `npm run build:wasm && npm run build` in a checkout of that commit. The
+vendored `package.json` adds subpath exports (`./keyagreement`, `./channel`,
+`./base64`, `./xwing`, `./nonce`) that upstream does not publish, because
+`verify-flow.ts` drives the same primitives `C8sClient.connect()` uses so the
+cascade can resolve phase by phase. Nothing else in the package is modified.
+
+`node scripts/verify-node.mjs` runs the same verification from Node against the
+live endpoint, which is the quickest way to tell a protocol or pin problem from
+a browser problem.
+
 ## Talking to the cluster from a browser
 
 Two properties of the deployment shape the UI, both measured against the live

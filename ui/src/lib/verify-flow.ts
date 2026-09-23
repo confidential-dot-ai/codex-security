@@ -22,9 +22,12 @@ import {
   type AttestationBundle,
   type AttestationResult,
 } from "c8s-verify";
-import { clientKeyAgreement } from "c8s-verify/keyagreement";
-import { Channel } from "c8s-verify/channel";
+// Subpath imports: the same primitives C8sClient.connect() uses internally. We
+// drive them directly so each phase can be shown as it resolves, rather than
+// reporting one opaque success or failure at the end.
+import { deriveChannel, generateXWingKeyPair, xwingDecapsulate } from "c8s-verify/keyagreement";
 import { bytesToBase64Url } from "c8s-verify/base64";
+
 
 export type StepId = "nonce" | "dcap" | "mrtd" | "rtmr1" | "rtmr2" | "meshca" | "channel";
 
@@ -104,6 +107,9 @@ function mapVerifyFailure(
 
   if (code === "nonce_mismatch") return apply("nonce", []);
   if (code === "report_data_mismatch") return apply("nonce", ["meshca", "dcap"]);
+  // The bundle did not echo the X-Wing key this browser sent: the evidence is
+  // not bound to this session, whatever else it proves.
+  if (code === "key_binding") return apply("nonce", ["meshca", "dcap"]);
 
   if (code === "invalid_cert") return apply("meshca", ["nonce"]);
   if (code === "identity_binding") {
@@ -181,9 +187,13 @@ export async function runVerification(
   onStep("nonce", "active");
   const nonce = generateNonce();
   const nonceB64u = bytesToBase64Url(nonce);
+  // Client-first: our X-Wing encapsulation key goes out with the nonce, so the
+  // enclave signs evidence that commits to both sides of the key exchange. One
+  // round trip, and a replayed quote cannot carry this session.
+  const keyPair = await generateXWingKeyPair();
   let bundle: AttestationBundle;
   try {
-    bundle = await client.fetchAttestation(nonce);
+    bundle = await client.fetchAttestation(nonce, keyPair);
   } catch (e) {
     onStep("nonce", "fail");
     throw new VerificationError(
@@ -207,7 +217,7 @@ export async function runVerification(
   onStep("dcap", "active");
   let attestation: AttestationResult;
   try {
-    attestation = await verifyAttestation(bundle, nonce, client.policy);
+    attestation = await verifyAttestation(bundle, nonce, client.policy, keyPair.ek);
   } catch (e) {
     throw mapVerifyFailure(e, onStep);
   }
@@ -234,38 +244,29 @@ export async function runVerification(
     if (animate) await sleep(90);
   }
 
-  // -- Phase 3: hybrid PQ handshake -> AES-256-GCM session ---------------
+  // -- Phase 3: X-Wing decapsulation -> AES-256-GCM channel --------------
   onStep("channel", "active");
   try {
-    const { key, handshake } = await clientKeyAgreement(
-      attestation.sessionPubKey,
+    // No network call here: the enclave's ciphertext arrived inside the signed
+    // evidence that phase 2 verified, so only the enclave that produced it can
+    // hold the other end of this key.
+    const sharedSecret = await xwingDecapsulate(keyPair, attestation.keyExchange.xwingCt);
+    const channel = await deriveChannel(
+      "client",
+      sharedSecret,
       attestation.keyAgreementContext,
+      attestation.keyExchange.sessionId,
     );
-    const hsRes = await fetch(`${client.baseUrl}${client.prefix}/handshake`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        nonce: nonceB64u,
-        client_x25519: bytesToBase64Url(handshake.clientX25519),
-        mlkem_ct: bytesToBase64Url(handshake.mlkemCiphertext),
-      }),
-    });
-    if (!hsRes.ok) {
-      throw new C8sVerifyError("channel_error", `handshake endpoint returned HTTP ${hsRes.status}`);
-    }
-    const { session_id: sessionId } = (await hsRes.json()) as { session_id?: string };
-    if (!sessionId) {
-      throw new C8sVerifyError("channel_error", "handshake did not return a session id");
-    }
+    const sessionId = bundle.session_id;
     const session = new Session({
       baseUrl: client.baseUrl,
       prefix: client.prefix,
       fetch: globalThis.fetch.bind(globalThis),
-      channel: new Channel(key),
+      channel,
       sessionId,
       attestation,
     });
-    onStep("channel", "pass", `ML-KEM-768 + X25519 → AES-256-GCM · session ${sessionId}`);
+    onStep("channel", "pass", `X-Wing (ML-KEM-768 + X25519) → AES-256-GCM · session ${sessionId}`);
     return {
       attestation,
       session,
@@ -279,7 +280,7 @@ export async function runVerification(
     onStep("channel", "fail");
     throw new VerificationError(
       "channel",
-      `evidence verified, but the channel handshake failed: ${errText(e)}`,
+      `evidence verified, but the channel could not be derived: ${errText(e)}`,
       codeOf(e) ?? "channel_error",
     );
   }
