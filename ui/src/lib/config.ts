@@ -33,24 +33,24 @@ export interface Profile {
   meshCaPem: string;
 }
 
-// Mesh CA of the cluster below. Pinned 2026-09-23 from the operator's own
-// `c8s get-kubeconfig`-attested session, not from an unverified fetch.
-const CODEX_DEV_MESH_CA = `-----BEGIN CERTIFICATE-----
-MIIBqTCCAS+gAwIBAgIQWugF+peffBYSU4QiXXyVhjAKBggqhkjOPQQDAzAWMRQw
-EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMwMTE5MDJaFw0yNzA5MjMwMTE5
-MDJaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
-YgAEH+VFJRtx4SPkbd+b9bLoNqWxrUvqCk1pV7eT24KBpRg8HBktg0aaHfOtAvrR
-td32Ig1N5xm1CrDDKjwaAGTBxvo1uJxMYtNSokFwZLhSKSLMNHWKiMoruTfLfsLq
-lkEQo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
-FgQUmVlpP+VmBOH8O/a3VefcZn1cisgwCgYIKoZIzj0EAwMDaAAwZQIxAK25fZTV
-ooCmhjV/JGf4bPr7r2Fc+sco5ps2y2ffvcfpwGVS/xONYJeAQ5WudiAhIwIwB84+
-74PG01viW4twsJVthisgdvKfYVRtJnwH3VIcGxStboDrxVofOS6+qevO4Irp
+// Mesh CA of the cluster below, pinned 2026-09-23 from an operator session
+// that had already attested the node, not from an unverified fetch.
+const CODEX_TDX_MESH_CA = `-----BEGIN CERTIFICATE-----
+MIIBqTCCAS+gAwIBAgIQDwFa3rbWAX/Q9O+vT+Ci6TAKBggqhkjOPQQDAzAWMRQw
+EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMwNDMwMTRaFw0yNzA5MjMwNDMw
+MTRaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
+YgAEkKjY1skCZNhMSgN2DCmRW9lOSxG+0pQ6HNr09v9CqlgXm3YDvE9V8XssMLna
+K8z53IHIwX3M4y9zJlEeiv/kEBsUoB95rfHytNgB+R5Mp8j2T5n6C36OmxDYmX6s
+atXyo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
+FgQUQUNZf7feLOUEdj4SbY95oULRD6QwCgYIKoZIzj0EAwMDaAAwZQIxALY/0wnH
+W/OwswGZE1UZDnA0N0AwaLL+mxfrGXPUp+3oRq8YV6MafB8EuoxAPMwiggIwCrgj
+TlKCWHwYJ1n3LKb38QwPtGGlUznyHCEP5oBnCeFuodtIdf4/V03chYz34o6A
 -----END CERTIFICATE-----`;
 
 export const PROFILES: Record<string, Profile> = {
-  "codex-dev": {
-    id: "codex-dev",
-    label: "codex-dev (Intel TDX, bare metal)",
+  "codex-tdx": {
+    id: "codex-tdx",
+    label: "codex-tdx (Intel TDX, bare metal)",
     description:
       "The scan API behind the c8s router on an Intel TDX node CVM. " +
       "Pins are the node image's published measurements.",
@@ -58,18 +58,18 @@ export const PROFILES: Record<string, Profile> = {
     tdxImage: {
       mrtd: "9309eaae9c151e766de0f97b1d1aaeb76b8c8c366080803943fb566521c8f0cf00a142d8b7b0683ed1d42c5a27198ba1",
       rtmr1:
-        "c7a87124d0c5943226b95dfeb56231f6512794e7fa50efc0578a1dbcab10bfa89b47a93ba6b08617ede02a22c0a5c4f7",
+        "3b260925fec6a0553b9a6aecf223a6ed1ddcbbee17df0b0e5c8bc056b0751c8530a83e71ed5b7ef9ff142ae842cdcecd",
       rtmr2:
-        "f26bcbd2e724a76d059ead9cd9592774bf202782b11606ce298b7d69e163a4c11e5f4add8703bc3ebf45340088636310",
+        "eb120e4c57137f7a3f72c6ca3403d6f26da427df4ddcf0ed2580b72ab08a7a6078034c728a78e1153f77f199c9bbf615",
     },
-    meshCaPem: CODEX_DEV_MESH_CA,
+    meshCaPem: CODEX_TDX_MESH_CA,
   },
 };
 
 export const DEFAULT_PROFILE =
   process.env.NEXT_PUBLIC_DEPLOYMENT && PROFILES[process.env.NEXT_PUBLIC_DEPLOYMENT]
     ? PROFILES[process.env.NEXT_PUBLIC_DEPLOYMENT]!
-    : PROFILES["codex-dev"]!;
+    : PROFILES["codex-tdx"]!;
 
 const HEX96 = /^[0-9a-f]{96}$/;
 
