@@ -50,7 +50,13 @@ export function TryIt() {
       />
 
       <Block
-        title="3. Submit a scan"
+        title="3. Read the admission allowlist"
+        body="The cluster admits only the image digests in this document, and admission does not rely on the control plane. Served here for convenience; pin the canonical bytes out of band if you want it to be an anchor rather than a claim."
+        code={`curl -s ${EP}/allowlist | jq '.workloads | keys'\n\n# the digest to compare against the operator's canonical copy\ncurl -s ${EP}/allowlist | shasum -a 256`}
+      />
+
+      <Block
+        title="4. Submit a scan"
         body="The scan API takes a repository and an optional full 40-character commit SHA; leave the revision out and the service resolves HEAD. The repository is cloned and scanned inside the enclave."
         code={`TOK=<your /v1/scans bearer token>\n\ncurl -s -X POST ${EP}/v1/scans \\\n  -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \\\n  -d '{"repository":"https://github.com/octocat/Hello-World"}'\n\ncurl -s -H "Authorization: Bearer $TOK" ${EP}/v1/scans\ncurl -s -H "Authorization: Bearer $TOK" ${EP}/v1/scans/<id>\ncurl -s -H "Authorization: Bearer $TOK" ${EP}/v1/scans/<id>/log\ncurl -s -H "Authorization: Bearer $TOK" ${EP}/v1/scans/<id>/files`}
         caution="These curl calls ride ordinary TLS, so the token and the findings are readable to whatever terminates it. That is exactly what this page avoids: it seals every request to the attested enclave instead. Use curl to convince yourself the endpoint is real; use the console when the contents matter."

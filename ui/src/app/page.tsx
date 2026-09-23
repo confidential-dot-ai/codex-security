@@ -4,6 +4,7 @@ import { Cascade } from "@/components/cascade";
 import { Verdict } from "@/components/verdict";
 import { PinsCard } from "@/components/pins-card";
 import { DeploymentCard } from "@/components/deployment-card";
+import { AllowlistCard } from "@/components/allowlist-card";
 import { References } from "@/components/references";
 import { TryIt } from "@/components/try-it";
 
@@ -17,6 +18,7 @@ export default function TrustPage() {
         <Verdict />
         <PinsCard />
         <DeploymentCard />
+        <AllowlistCard />
       </div>
       <TryIt />
       <References />
