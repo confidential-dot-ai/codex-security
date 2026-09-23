@@ -7,7 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint"
+    "lint": "next lint",
+    "proxy": "node scripts/dev-proxy.mjs",
+    "verify:node": "node scripts/verify-node.mjs"
   },
   "dependencies": {
     "c8s-verify": "file:vendor/c8s-verify-js",

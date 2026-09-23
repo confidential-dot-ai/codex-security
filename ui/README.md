@@ -105,9 +105,27 @@ vendored `package.json` adds subpath exports (`./keyagreement`, `./channel`,
 `verify-flow.ts` drives the same primitives `C8sClient.connect()` uses so the
 cascade can resolve phase by phase. Nothing else in the package is modified.
 
-`node scripts/verify-node.mjs` runs the same verification from Node against the
-live endpoint, which is the quickest way to tell a protocol or pin problem from
-a browser problem.
+`npm run verify:node` runs the same verification from Node against the live
+endpoint, which is the quickest way to tell a protocol or pin problem from a
+browser problem.
+
+## Local loop: the dev proxy
+
+The serving certificate blocks the browser before anything else can happen, and
+some browsers report that only as an opaque `NetworkError`. For local work:
+
+```bash
+npm run proxy   # http://localhost:8443 -> https://15.204.104.35:30443
+npm run dev     # then put http://localhost:8443 in the endpoint field
+```
+
+This does not weaken the check. Verification never trusted the TLS chain: it
+verifies a nonce-bound TDX quote and the mesh identity proof carried inside the
+attestation bundle, against pins the page holds out of band, and the sealed
+channel is established end to end through the proxy rather than with it. A
+proxy sees exactly what the TLS-terminating load balancer already sees — which
+is the threat the channel exists to answer. Development only; a deployed page
+must point at the endpoint itself.
 
 ## Talking to the cluster from a browser
 
