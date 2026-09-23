@@ -104,3 +104,31 @@ export function looksLikePem(text: string): boolean {
     text.includes("-----END CERTIFICATE-----")
   );
 }
+
+/** Convenience aliases for the active profile, mirroring c8s-verify-poc. */
+export const PINS: TdxImagePin = DEFAULT_PROFILE.tdxImage;
+export const MESH_CA_PEM: string = DEFAULT_PROFILE.meshCaPem;
+
+/** Copy the pages need that is not a security anchor. */
+export const SITE = {
+  defaultEndpoint: DEFAULT_PROFILE.endpoint,
+  platformLabel: "Intel TDX, bare metal (DCAP)",
+  repo: "https://github.com/confidential-dot-ai/codex-security",
+  c8s: "https://github.com/confidential-dot-ai/c8s",
+  verifyLib: "https://github.com/confidential-dot-ai/c8s-verify-js",
+} as const;
+
+/**
+ * What is running behind the endpoint. Not a security anchor — the pins above
+ * are — but the strings an operator publishes alongside them, so a reader can
+ * go and look at the same image. The registry digest is what GHCR serves and
+ * what the cluster allowlist pins; it differs from any digest computed locally.
+ */
+export const DEPLOYMENT = {
+  image: "ghcr.io/confidential-dot-ai/codex-security:scan-api",
+  digest: "sha256:f67d4ae6b867c528503623af989c8943a8784df8aab9304a058f1e48b473e2ec",
+  release: "c8s v0.33.1 (ec67bd8 + #691)",
+  releaseLong:
+    "c8s v0.33.1 (ec67bd8) plus the operator-scope guard fix (c8s#691), a Cilium postStart fix, and a deployment-baked router upstream. Node image built 2026-09-23, locked profile, Intel TDX node CVM, Kubernetes v1.36.4+rke2r1.",
+  kubernetes: "v1.36.4+rke2r1",
+} as const;

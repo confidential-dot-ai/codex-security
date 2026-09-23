@@ -66,16 +66,47 @@ npm run dev     # http://localhost:3000
 Enter the endpoint, paste the API token (held in the tab only — never stored),
 review the pins, then **Verify and connect**.
 
+## Pages
+
+Two pages, sharing one verification session (the provider sits in the root
+layout, so a session established on the trust page is the session the scan page
+speaks over):
+
+- **`/` — trust.** What the endpoint is, what gets checked and in what order,
+  the live cascade, the verdict with measured-versus-pinned registers, the pins
+  themselves, what is running behind the endpoint, and an explicit list of what
+  the page does *not* prove.
+- **`/scan` — scan.** Gated on a verified session. Token entry (tab only),
+  submission, the job list, and per-job log tail, rendered report and artifacts.
+
+Both follow the layout and palette of
+[c8s-verify-poc](https://github.com/confidential-dot-ai/c8s-verify-poc)'s
+`demo-app`, which is the house style for c8s verification pages.
+
 ## Layout
 
 ```
-src/lib/config.ts     deployment profiles, manifest parsing
-src/lib/attest.ts     the verification flow and its UI-visible phases
-src/lib/api.ts        the scan API, spoken over the attested channel
-src/components/       the cascade and the scan console
-vendor/c8s-verify-js  the verification library (MIT), vendored with its WASM
+src/lib/config.ts        deployment profile, pins, manifest parsing
+src/lib/verify-flow.ts   the verification flow and its UI-visible phases
+src/lib/verify-context.tsx  one session shared by both pages
+src/lib/api.ts           the scan API, spoken over the attested channel
+src/components/          cascade, verdict, pins, scan console, markdown
+vendor/c8s-verify-js     the verification library (MIT), vendored with its WASM
 ```
 
 The library is vendored rather than depended on from a registry because it is
 not published to npm and its git tree ships no build output; the WASM verifier
 is built from Rust. `vendor/c8s-verify-js/LICENSE` travels with it.
+
+## Talking to the cluster from a browser
+
+Two properties of the deployment shape the UI, both measured against the live
+endpoint:
+
+- The serving certificate is CDS-issued and attestation-bound, so a browser
+  blocks `fetch()` to the origin until the tab has opened it once and accepted
+  the interstitial. A failure at that point happens *before any attestation
+  ran*, so the page reports it as a connection error, never as a verdict.
+- `/v1/scans` answers a direct browser call with `401` and no CORS headers at
+  all, so direct calls can never work. Every API call therefore rides the
+  attested tunnel, which is also what keeps the token sealed.
