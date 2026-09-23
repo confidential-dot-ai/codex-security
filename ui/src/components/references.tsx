@@ -29,6 +29,20 @@ const REFERENCES = [
     href: SITE.repo,
     note: "The scanner, the scan API, and this console.",
   },
+  {
+    k: "The node image build",
+    t: "confidential-os-builder",
+    v: "github.com/confidential-dot-ai/confidential-os-builder",
+    href: "https://github.com/confidential-dot-ai/confidential-os-builder",
+    note: "Builds the measured guest image and publishes the manifest the MRTD and RTMR pins above are taken from. Reproducible builds are what make a measurement mean anything.",
+  },
+  {
+    k: "The DCAP verifier",
+    t: "attestation-rs",
+    v: "github.com/confidential-dot-ai/attestation-rs",
+    href: "https://github.com/confidential-dot-ai/attestation-rs",
+    note: "The Rust implementation that checks the TDX quote and its Intel certificate chain. It is compiled to WebAssembly and is what actually runs in this tab.",
+  },
 ];
 export function References() {
   return (
@@ -38,7 +52,7 @@ export function References() {
       </h2>
       <p className="mb-5 max-w-[68ch] text-[0.95rem] leading-relaxed text-foreground">
         Every link in the chain is public: the exact image behind the endpoint, the platform it
-        runs on, and the verifier running on this page.
+        runs on, the build that produced the measured guest, and the verifier running on this page.
       </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {REFERENCES.map((r) => (
