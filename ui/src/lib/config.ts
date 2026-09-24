@@ -151,8 +151,6 @@ export const DEPLOYMENT = {
   digest: "sha256:f67d4ae6b867c528503623af989c8943a8784df8aab9304a058f1e48b473e2ec",
   release: "c8s v0.33.1",
   releaseUrl: "https://github.com/confidential-dot-ai/c8s/releases/tag/v0.33.1",
-  nodeImage: "ghcr.io/confidential-dot-ai/c8s-base",
-  nodeImageUrl: "https://github.com/confidential-dot-ai/c8s/pkgs/container/c8s-base",
   /** The upstream findings dashboard that `codex-security serve` ships. */
   dashboardPath: "/dashboard/",
 } as const;

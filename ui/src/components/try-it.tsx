@@ -1,4 +1,4 @@
-import { DEPLOYMENT, SITE } from "@/lib/config";
+import { DEPLOYMENT, PINS, SITE } from "@/lib/config";
 import { CopyButton } from "./copy-button";
 
 const EP = SITE.defaultEndpoint;
@@ -38,14 +38,14 @@ export function TryIt() {
       </p>
 
       <Block
-        title="1. Get the anchors, out of band"
-        body="The pins must not come from the endpoint you are testing. The node image manifest is published with the image, and an operator gives you the mesh CA. The CA is served here only for convenience — treat a fetched copy as unverified until it matches what your operator told you."
-        code={`# the cluster identity anchor (compare against your operator's copy)\ncurl -s ${EP}/.well-known/mesh-ca.pem -o mesh-ca.pem\n\n# the image measurements: MRTD, RTMR[1], RTMR[2]\n# from the published node image manifest for ${DEPLOYMENT.nodeImage}`}
+        title="1. Take the anchors with you"
+        body="The pins must not come from the endpoint under test. These are the exact values this page enforces, written into the manifest format c8s verify reads — so the command below checks the same thing the cascade above checked. The mesh CA is fetched here for convenience; it is an operator's statement, so treat a fetched copy as unverified until it matches the one you were given."
+        code={`cat > manifest.json <<'EOF'\n{\n  "tdx": {\n    "mrtd":  "${PINS.mrtd}",\n    "rtmr1": "${PINS.rtmr1}",\n    "rtmr2": "${PINS.rtmr2}"\n  }\n}\nEOF\n\n# the cluster identity anchor — compare against your operator's copy\ncurl -s ${EP}/.well-known/mesh-ca.pem -o mesh-ca.pem`}
       />
 
       <Block
         title="2. Verify the endpoint"
-        body="c8s verify does what this page does, in a terminal: a fresh nonce-bound TDX quote, the DCAP chain, the register pins, and the serving leaf chained to your mesh CA. Use the attest-pq path with --kind lb; it binds the leaf that actually serves the connection. The default discovery mode fails here by construction, because it attests the CDS-issued mesh certificate while the wire serves the Let's Encrypt one."
+        body="c8s verify does what this page does, in a terminal: a fresh nonce-bound TDX quote, the DCAP chain, the register pins, and the serving leaf chained to your mesh CA. Use the attest-pq path with --kind lb; it binds the leaf that actually serves the connection. The default discovery mode fails here by construction, because it attests the CDS-issued mesh certificate while the wire serves the Let's Encrypt one. Change one hex digit in manifest.json and it fails closed, which is the point."
         code={`c8s verify ${EP} \\\n  --mode attest-pq --kind lb \\\n  --image-manifest manifest.json \\\n  --mesh-ca mesh-ca.pem`}
       />
 
