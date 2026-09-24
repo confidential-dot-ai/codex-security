@@ -35,9 +35,6 @@ function Block({
 export function TryIt() {
   return (
     <section className="mt-12 border-t border-border pt-8" id="try-it">
-      <p className="mb-1 font-mono text-[0.68rem] uppercase tracking-[0.15em] text-accent">
-        do not take our word for it
-      </p>
       <h2 className="mb-2 text-2xl font-semibold tracking-[0.01em] text-heading">
         Try it yourself
       </h2>
