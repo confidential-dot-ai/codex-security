@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# The vendored verification library ships as build output (its own tree has
+# no dist); the root ignore would otherwise drop it and the package is useless
+# without it.
+!vendor/c8s-verify-js/dist/
+
+# Local secrets: NEXT_PUBLIC_SCAN_TOKEN for development.
+.env*.local
