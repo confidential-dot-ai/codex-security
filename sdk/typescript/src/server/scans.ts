@@ -23,6 +23,11 @@ export interface ScanJob {
     coverage?: string;
     warning?: string;
   };
+  /**
+   * Outcome of publishing the findings into the findings service. Best effort:
+   * a scan that produced a report is not failed because publication was not.
+   */
+  published?: { findings: number } | { error: string };
 }
 
 export interface ScanSubmission {
@@ -65,6 +70,7 @@ export class ScanRunner {
   readonly #scansDir: string;
   readonly #extraArguments: readonly string[];
   readonly #environment: NodeJS.ProcessEnv;
+  readonly #findingsUrl: string;
   #active: ChildProcess | null = null;
 
   public constructor(environment: NodeJS.ProcessEnv = process.env) {
@@ -77,6 +83,10 @@ export class ScanRunner {
     );
     const extra = environment["CODEX_SECURITY_SCAN_ARGS"] ?? "";
     this.#extraArguments = extra.split(/\s+/).filter((value) => value !== "");
+    // Loopback by default: the findings service is this same process.
+    this.#findingsUrl =
+      environment["CODEX_SECURITY_FINDINGS_URL"] ??
+      `http://127.0.0.1:${environment["PORT"] ?? "3000"}`;
   }
 
   public list(): ScanJob[] {
@@ -212,7 +222,87 @@ export class ScanRunner {
       exitCode === 0 || job.result?.status.startsWith("completed") === true
         ? "completed"
         : "failed";
+    if (job.status === "completed") {
+      job.published = await this.#publish(job, outputDir, logPath);
+    }
   }
+
+  /**
+   * Hand the completed scan to the findings service, so the dashboard and
+   * /v1/findings show it. bulk-scan only writes artifacts to disk; without
+   * this the store stays empty however many scans have run.
+   *
+   * The service publishes to itself over loopback — it is the same process —
+   * so this needs no credentials and never leaves the pod.
+   */
+  async #publish(
+    job: ScanJob,
+    outputDir: string,
+    logPath: string,
+  ): Promise<ScanJob["published"]> {
+    let scanDir: string;
+    try {
+      scanDir = await latestAttemptDir(outputDir, job.id);
+    } catch (error) {
+      return { error: `no publishable artifacts: ${errorText(error)}` };
+    }
+    // A clean scan is a result, not a failure: `publish` exits nonzero with
+    // "no findings to publish", which would otherwise read as broken wiring.
+    const found = await countFindings(scanDir);
+    if (found === 0) return { findings: 0 };
+    const log = createWriteStream(logPath, { flags: "a" });
+    const child = spawn(
+      process.execPath,
+      [
+        process.argv[1]!,
+        "publish",
+        "scan",
+        "--scan-dir",
+        scanDir,
+        "--to",
+        "custom",
+        "--findings-url",
+        this.#findingsUrl,
+      ],
+      { env: { ...this.#environment }, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    child.stdout.pipe(log, { end: false });
+    child.stderr.pipe(log, { end: false });
+    const code: number = await new Promise((resolveExit) => {
+      child.once("error", () => resolveExit(-1));
+      child.once("exit", (value) => resolveExit(value ?? -1));
+    });
+    log.end();
+    if (code !== 0) return { error: `publish exited ${code}; see the scan log` };
+    return { findings: found };
+  }
+}
+
+/** The newest attempt directory bulk-scan wrote for this scan. */
+async function latestAttemptDir(outputDir: string, id: string): Promise<string> {
+  const root = join(outputDir, "artifacts", id);
+  const attempts = (await readdir(root, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("attempt-"))
+    .map((entry) => entry.name)
+    .sort((a, b) => Number(a.slice(8)) - Number(b.slice(8)));
+  const last = attempts.at(-1);
+  if (last === undefined) throw new Error(`no attempt directory under ${root}`);
+  return join(root, last);
+}
+
+async function countFindings(scanDir: string): Promise<number> {
+  try {
+    const parsed = JSON.parse(await readFile(join(scanDir, "findings.json"), "utf8")) as {
+      findings?: unknown[];
+    };
+    return parsed.findings?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function readResult(
