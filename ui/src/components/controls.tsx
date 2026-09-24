@@ -11,7 +11,7 @@ export function Controls() {
 
   return (
     <Card>
-      <div className="grid grid-cols-1 gap-3">
+      <div>
         <label className="block">
           <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">
             Scan API endpoint
@@ -27,14 +27,6 @@ export function Controls() {
             className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-[0.85rem] text-foreground outline-none focus:border-accent disabled:opacity-60"
           />
         </label>
-        <div className="block">
-          <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">
-            Platform
-          </span>
-          <div className="w-full rounded-md border border-border bg-[var(--pre-bg)] px-3 py-2 font-mono text-[0.85rem] text-muted">
-            {SITE.platformLabel}
-          </div>
-        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-4">

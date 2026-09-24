@@ -133,7 +133,6 @@ export const DEV_TOKEN = process.env.NEXT_PUBLIC_SCAN_TOKEN ?? "";
 export const SITE = {
   defaultEndpoint: DEFAULT_PROFILE.endpoint,
   frontDoor: DEFAULT_PROFILE.frontDoor,
-  platformLabel: "Intel TDX, bare metal (DCAP)",
   repo: "https://github.com/confidential-dot-ai/codex-security",
   c8s: "https://github.com/confidential-dot-ai/c8s",
   verifyLib: "https://github.com/confidential-dot-ai/c8s-verify-js",
