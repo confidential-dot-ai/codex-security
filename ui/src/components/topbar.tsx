@@ -27,7 +27,7 @@ export function Topbar() {
             <Logo height={18} />
           </a>
           <span className="hidden font-mono text-[0.65rem] uppercase tracking-[0.12em] text-muted sm:inline">
-            codex-security · attested console
+            confidential codex security
           </span>
         </div>
         <nav className="flex items-center gap-4">

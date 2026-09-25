@@ -8,9 +8,9 @@ import { VerifyProvider } from "@/lib/verify-context";
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t='light';}var d=document.documentElement;d.dataset.theme=t;d.classList.toggle('dark',t==='dark');}catch(e){document.documentElement.dataset.theme='light';}})();`;
 
 export const metadata: Metadata = {
-  title: "codex-security · attested console",
+  title: "Confidential Codex Security",
   description:
-    "Verify in your browser that the codex-security scan API is a genuine Intel TDX enclave running the image you pinned, then submit scans through the channel that verification established.",
+    "codex-security run as a service inside a hardware enclave. Check the machine and the software it booted from your own browser, then submit a scan through a channel only that enclave can read.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
