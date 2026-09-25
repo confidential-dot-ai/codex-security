@@ -41,10 +41,11 @@ export function ScanConsole() {
   const { getSession, token, setToken, verifyEpoch, reconnect } = useVerify();
 
   const api = useMemo(() => {
-    const session = getSession();
-    return session && token ? new ScanApi(session, token) : null;
-    // A new channel means a new session object; rebuild the client with it.
-  }, [getSession, token, verifyEpoch]);
+    if (!token || !getSession()) return null;
+    // Pass the getter, not the session: a quiet reconnect swaps the session
+    // object, and the client must follow it rather than hold the stale one.
+    return new ScanApi(getSession, token, async () => (await reconnect()) !== null);
+  }, [getSession, reconnect, token, verifyEpoch]);
 
   const [jobs, setJobs] = useState<ScanJob[]>([]);
   const [repository, setRepository] = useState("https://github.com/octocat/Hello-World");

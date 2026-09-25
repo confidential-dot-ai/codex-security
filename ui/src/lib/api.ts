@@ -6,6 +6,7 @@
 // point: it is never exposed to whatever terminates TLS in front of the
 // cluster.
 
+import { C8sVerifyError } from "c8s-verify";
 import type { RequestInit as TunnelInit, Session } from "c8s-verify";
 
 export type ScanStatus = "queued" | "running" | "completed" | "failed";
@@ -31,18 +32,57 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The endpoint rejected the tunnel request itself, before the scan API saw it:
+ * the session id is no longer one it holds. That is a channel failure, not an
+ * authorization failure, however much the status code looks like one.
+ */
+function isChannelLost(e: unknown): boolean {
+  return e instanceof C8sVerifyError && e.code === "channel_error";
+}
+
 export class ScanApi {
+  /**
+   * Takes a session *getter* rather than a session, because a quiet reconnect
+   * replaces the session object underneath: holding the old one would keep
+   * sealing requests to a channel the endpoint has already forgotten.
+   */
   constructor(
-    private readonly session: Session,
+    private readonly getSession: () => Session | null,
     private readonly token: string,
+    private readonly renew?: () => Promise<boolean>,
   ) {}
 
-  async #call(path: string, init?: TunnelInit): Promise<{ status: number; text: string }> {
-    const response = await this.session.fetch(path, {
+  async #send(path: string, init?: TunnelInit): Promise<{ status: number; text: string }> {
+    const session = this.getSession();
+    if (!session) {
+      throw new ApiError(0, "No attested channel is open. Verify the endpoint first.");
+    }
+    const response = await session.fetch(path, {
       ...init,
       headers: { Authorization: `Bearer ${this.token}`, ...(init?.headers ?? {}) },
     });
     return { status: response.status, text: response.text() };
+  }
+
+  async #call(path: string, init?: TunnelInit): Promise<{ status: number; text: string }> {
+    try {
+      return await this.#send(path, init);
+    } catch (e) {
+      // A session outlives neither a cluster restart nor the endpoint's own
+      // expiry. Re-verify once — which re-runs every check, so the retry is
+      // sent to an enclave that has just proven itself again — and retry.
+      if (isChannelLost(e) && this.renew && (await this.renew())) {
+        return await this.#send(path, init);
+      }
+      if (isChannelLost(e)) {
+        throw new ApiError(
+          0,
+          "The attested channel is no longer open — the session expired, or the cluster restarted. Verify again to open a new one.",
+        );
+      }
+      throw e;
+    }
   }
 
   async #json<T>(path: string, init?: TunnelInit): Promise<T> {
