@@ -17,8 +17,7 @@ It does two things, in this order:
    only ciphertext.
 
 It is a static Next.js export: `npm install && npm run build`, output in `out/`.
-`vercel.json` pins `outputDirectory: "out"`; set the Vercel Root Directory to
-this folder. Follows the pattern of
+Set the Vercel Root Directory to this folder. Follows the pattern of
 [c8s-verify-poc](https://github.com/confidential-dot-ai/c8s-verify-poc).
 
 ## Why connect rather than just verify
@@ -115,9 +114,12 @@ browser problem.
 
 ## Deploying
 
-A static export, so any static host works; `vercel.json` pins
-`outputDirectory: "out"`. On Vercel set the **Root Directory** to `ui` and leave
-the rest at the Next.js defaults. Node 22.
+A static export (`output: "export"` in `next.config.ts`), so any static host can
+serve `out/`. On Vercel set the **Root Directory** to `ui` and leave everything
+else at the Next.js defaults — do not override the output directory. Vercel's
+Next.js builder reads the export itself and looks for its own build manifests
+under `.next`; pointing it at `out` makes it fail with a missing
+`routes-manifest.json` *after* an otherwise successful build. Node 22.
 
 Do **not** set `NEXT_PUBLIC_SCAN_TOKEN` on a deployment. Anything `NEXT_PUBLIC_*`
 is compiled into the client bundle and readable by every visitor; it exists for
