@@ -328,7 +328,7 @@ function JobDetail({ api, job }: { api: ScanApi; job: ScanJob }) {
 
       {tab === "log" && (
         <div className="code-block">
-          <CopyButton text={log} />
+          <CopyButton text={log} variant="floating" />
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">
             <code>{log || note || "Waiting for output…"}</code>
           </pre>
@@ -380,7 +380,7 @@ function JobDetail({ api, job }: { api: ScanApi; job: ScanJob }) {
             </ul>
             {openFile && (
               <div className="code-block mt-3">
-                <CopyButton text={openFile.text} />
+                <CopyButton text={openFile.text} variant="floating" />
                 <p className="mb-1 break-all font-mono text-[0.72rem] text-muted">
                   {openFile.path}
                 </p>

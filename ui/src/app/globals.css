@@ -251,6 +251,10 @@ pre code {
 .copy-button:focus-visible {
   opacity: 1;
 }
+/* Pointer-less input has no hover, so the affordance must simply be there. */
+@media (hover: none) {
+  .copy-button { opacity: 1; }
+}
 .copy-button:hover {
   color: var(--foreground);
 }

@@ -147,7 +147,7 @@ export const SITE = {
 export const DEPLOYMENT = {
   image: "ghcr.io/confidential-dot-ai/codex-security",
   imageUrl: "https://github.com/confidential-dot-ai/codex-security/pkgs/container/codex-security",
-  digest: "sha256:f67d4ae6b867c528503623af989c8943a8784df8aab9304a058f1e48b473e2ec",
+  digest: "sha256:da569722e818d83099bfbb3659e0c40affb25ed7516afcd624d4d2655b3c2f76",
   release: "c8s v0.33.1",
   releaseUrl: "https://github.com/confidential-dot-ai/c8s/releases/tag/v0.33.1",
   /** The upstream findings dashboard that `codex-security serve` ships. */

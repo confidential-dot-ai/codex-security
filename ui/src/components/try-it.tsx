@@ -19,7 +19,7 @@ function Block({
       <h3 className="mb-1 text-[1.02rem] font-semibold text-heading">{title}</h3>
       <p className="mb-2 max-w-[72ch] text-[0.9rem] leading-relaxed text-foreground">{body}</p>
       <div className="code-block">
-        <CopyButton text={code} />
+        <CopyButton text={code} variant="floating" />
         <pre>
           <code>{code}</code>
         </pre>
