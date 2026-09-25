@@ -113,6 +113,22 @@ cascade can resolve phase by phase. Nothing else in the package is modified.
 endpoint, which is the quickest way to tell a protocol or pin problem from a
 browser problem.
 
+## Deploying
+
+A static export, so any static host works; `vercel.json` pins
+`outputDirectory: "out"`. On Vercel set the **Root Directory** to `ui` and leave
+the rest at the Next.js defaults. Node 22.
+
+Do **not** set `NEXT_PUBLIC_SCAN_TOKEN` on a deployment. Anything `NEXT_PUBLIC_*`
+is compiled into the client bundle and readable by every visitor; it exists for
+`.env.local` during development, and without it the page asks each visitor for
+their own token.
+
+The pins are compiled in at build time. A rebuilt cluster changes its RTMRs and
+its mesh CA, so it needs a redeploy, not a reload — which is the intended
+behaviour: a page that could silently adopt new pins would not be pinning
+anything.
+
 ## Local loop: the dev proxy
 
 Not needed against an `acme` front door, whose certificate the browser trusts.
