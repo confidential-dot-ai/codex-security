@@ -20,17 +20,15 @@ export function Hero() {
         it, and neither can we.
       </p>
       <p className="mt-4 text-[1.02rem] leading-relaxed text-foreground">
-        You do not have to take that on faith, which is what this page is for. It asks the cluster
-        for fresh hardware evidence and checks it here, in your browser: that the machine is real
-        Intel TDX silicon, that it booted exactly the image whose measurements are published below,
-        and that it is this cluster rather than some other genuine one. You can also see which
-        image digests the cluster will run at all. Nothing is checked by a server of ours.
+        This page checks that for you, here, in this tab. Your browser asks the machine for a
+        signed report that only genuine Intel TDX hardware can produce, and compares it against
+        the exact software this cluster is supposed to be running. If anything fails to match, the
+        page says so and nothing is sent.
       </p>
+
       <p className="mt-4 text-[1.02rem] leading-relaxed text-foreground">
         If every check passes, the same run opens an encrypted channel that only the verified
-        enclave can read, and the <a href="/scan">scan console</a> speaks through it. The
-        repository you name, the findings that come back and your API token stay sealed to the
-        enclave — not to whatever terminates TLS in front of it.
+        enclave can read, and the <a href="/scan">scan console</a> speaks through it.
       </p>
     </div>
   );
