@@ -18,7 +18,7 @@ import {
   type StepState,
   type VerifySuccess,
 } from "./verify-flow";
-import { DEV_TOKEN, MESH_CA_PEM, PINS, SITE, parseManifest } from "./config";
+import { DEV_TOKEN, MESH_CA_PEM, PINS, SITE } from "./config";
 
 export interface StepInfo {
   state: StepState;
@@ -50,13 +50,6 @@ interface VerifyContextValue {
   reconnect: () => Promise<Session | null>;
   disconnect: () => void;
   pins: PinsState;
-  setPin: (k: keyof PinsState, v: string) => void;
-  pinsEditable: boolean;
-  setPinsEditable: (v: boolean) => void;
-  pinsEdited: boolean;
-  resetPins: () => void;
-  loadManifest: (text: string) => void;
-  manifestNote: string | null;
   /** Bearer token for /v1/scans. Tab-only: never persisted anywhere. */
   token: string;
   setToken: (v: string) => void;
@@ -87,9 +80,7 @@ export function VerifyProvider({ children }: { children: ReactNode }) {
   const [steps, setSteps] = useState<Record<StepId, StepInfo>>(INITIAL_STEPS);
   const [result, setResult] = useState<VerifySuccess | null>(null);
   const [error, setError] = useState<VerifyContextValue["error"]>(null);
-  const [pins, setPins] = useState<PinsState>(PUBLISHED_PINS);
-  const [pinsEditable, setPinsEditable] = useState(false);
-  const [manifestNote, setManifestNote] = useState<string | null>(null);
+  const pins = PUBLISHED_PINS;
   const [verifyEpoch, setVerifyEpoch] = useState(0);
   const [token, setToken] = useState(DEV_TOKEN);
   const sessionRef = useRef<Session | null>(null);
@@ -159,36 +150,6 @@ export function VerifyProvider({ children }: { children: ReactNode }) {
     setVerifyEpoch((n) => n + 1);
   }, []);
 
-  const setPin = useCallback((k: keyof PinsState, v: string) => {
-    setPins((prev) => ({ ...prev, [k]: v }));
-  }, []);
-
-  const resetPins = useCallback(() => {
-    setPins(PUBLISHED_PINS);
-    setManifestNote(null);
-  }, []);
-
-  /** Load MRTD/RTMR[1]/RTMR[2] from a pasted node-image manifest.json, the
-   *  same file `c8s verify --image-manifest` reads. Nothing here is fetched
-   *  from the endpoint under test. */
-  const loadManifest = useCallback((text: string) => {
-    setManifestNote(null);
-    if (!text.trim()) return;
-    try {
-      const pin = parseManifest(text);
-      setPins((prev) => ({ ...prev, mrtd: pin.mrtd, rtmr1: pin.rtmr1, rtmr2: pin.rtmr2 }));
-      setManifestNote("Image pins loaded from the pasted manifest.");
-    } catch (e) {
-      setManifestNote(`Could not read that manifest: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, []);
-
-  const pinsEdited =
-    pins.mrtd !== PUBLISHED_PINS.mrtd ||
-    pins.rtmr1 !== PUBLISHED_PINS.rtmr1 ||
-    pins.rtmr2 !== PUBLISHED_PINS.rtmr2 ||
-    pins.meshCaPem !== PUBLISHED_PINS.meshCaPem;
-
   const value = useMemo<VerifyContextValue>(
     () => ({
       endpoint,
@@ -204,20 +165,12 @@ export function VerifyProvider({ children }: { children: ReactNode }) {
       reconnect,
       disconnect,
       pins,
-      setPin,
-      pinsEditable,
-      setPinsEditable,
-      pinsEdited,
-      resetPins,
-      loadManifest,
-      manifestNote,
       token,
       setToken,
     }),
     [
       endpoint, status, steps, result, error, run, verifyEpoch, getSession, reconnect,
-      disconnect, pins, setPin, pinsEditable, pinsEdited, resetPins, loadManifest,
-      manifestNote, token,
+      disconnect, pins, token,
     ],
   );
 

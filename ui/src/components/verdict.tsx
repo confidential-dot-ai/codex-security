@@ -162,12 +162,12 @@ export function Verdict() {
         </div>
         <div className="sm:col-span-2">
           <Disclosure summary="View raw report data" meta="JSON">
-            <div className="mb-1 flex justify-end">
-              <CopyButton text={rawReport} />
+            <div className="code-block">
+              <CopyButton text={rawReport} variant="floating" />
+              <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-[0.72rem] leading-relaxed">
+                <code>{rawReport}</code>
+              </pre>
             </div>
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-[var(--pre-bg)] p-3 font-mono text-[0.72rem] leading-relaxed">
-              <code>{rawReport}</code>
-            </pre>
           </Disclosure>
         </div>
       </dl>

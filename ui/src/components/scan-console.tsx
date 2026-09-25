@@ -116,12 +116,7 @@ export function ScanConsole() {
 
   return (
     <div className="flex flex-col gap-6">
-      {DEV_TOKEN ? (
-        <p className="text-[0.82rem] leading-relaxed text-muted">
-          Using the development token from <span className="font-mono">NEXT_PUBLIC_SCAN_TOKEN</span>
-          . It is sent sealed inside the attested channel, exactly as a pasted one would be.
-        </p>
-      ) : (
+      {!DEV_TOKEN && (
         <Card>
           <label className="block">
             <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">
@@ -328,7 +323,7 @@ function JobDetail({ api, job }: { api: ScanApi; job: ScanJob }) {
 
       {tab === "log" && (
         <div className="code-block">
-          <CopyButton text={log} />
+          <CopyButton text={log} variant="floating" />
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">
             <code>{log || note || "Waiting for output…"}</code>
           </pre>
@@ -380,7 +375,7 @@ function JobDetail({ api, job }: { api: ScanApi; job: ScanJob }) {
             </ul>
             {openFile && (
               <div className="code-block mt-3">
-                <CopyButton text={openFile.text} />
+                <CopyButton text={openFile.text} variant="floating" />
                 <p className="mb-1 break-all font-mono text-[0.72rem] text-muted">
                   {openFile.path}
                 </p>

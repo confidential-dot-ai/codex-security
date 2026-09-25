@@ -132,30 +132,14 @@ export function AllowlistCard() {
             })}
           </ul>
 
-          <div className="mt-4 border-t border-border pt-3">
-            <div className="font-mono text-[0.68rem] uppercase tracking-wider text-muted">
-              document sha-256
-            </div>
-            <div className="mt-0.5 flex items-start gap-2">
-              <span className="min-w-0 break-all font-mono text-[0.75rem]">{state.sha256}</span>
-              <span className="code-block shrink-0 opacity-100">
-                <CopyButton text={state.sha256} />
-              </span>
-            </div>
-            <p className="mt-1 text-[0.76rem] leading-relaxed text-muted">
-              Compare this against the canonical document your operator publishes. If they differ,
-              the cluster is not enforcing what you were told it enforces.
-            </p>
-          </div>
-
-          <div className="mt-3">
+          <div className="mt-4">
             <Disclosure summary="View the served allowlist" meta="JSON">
-              <div className="mb-1 flex justify-end">
-                <CopyButton text={state.raw} />
+              <div className="code-block">
+                <CopyButton text={state.raw} variant="floating" />
+                <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">
+                  <code>{JSON.stringify(state.doc, null, 2)}</code>
+                </pre>
               </div>
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">
-                <code>{JSON.stringify(state.doc, null, 2)}</code>
-              </pre>
             </Disclosure>
           </div>
         </>
