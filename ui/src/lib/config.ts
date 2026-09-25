@@ -42,19 +42,19 @@ export interface Profile {
   meshCaPem: string;
 }
 
-// Mesh CA of the cluster below. Re-pinned 2026-09-23 at the production cutover:
+// Mesh CA of the cluster below. Re-pinned 2026-09-25 after a cluster rebuild:
 // a rebuilt cluster mints a new mesh CA, so this value moves with the RTMRs.
 // It comes from an operator who had already attested the node.
 const CODEX_MESH_CA = `-----BEGIN CERTIFICATE-----
-MIIBqjCCAS+gAwIBAgIQDxMEqKaJeclYafzRtCNvrzAKBggqhkjOPQQDAzAWMRQw
-EgYDVQQDEwtjOHMgTWVzaCBDQTAeFw0yNjA5MjMyMjUxNTdaFw0yNzA5MjMyMjUx
-NTdaMBYxFDASBgNVBAMTC2M4cyBNZXNoIENBMHYwEAYHKoZIzj0CAQYFK4EEACID
-YgAEAgxu9y+2RywKg72kXFqwOsGhciylM0j2Mk68O6F5tfKKKfCrvhImKhvGP8cX
-a68HMyNf9BBEwOU8Eu8u5RdTkiwi1bcQGfrCZIyC+aPcpEmkqqVfAQGO4o7Y/xkF
-EolMo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4E
-FgQU8awySzOJKh+fVDQ++GCP9Z16a4AwCgYIKoZIzj0EAwMDaQAwZgIxANnhaVvq
-AvBHrhjdhorIRjRaGl/enhb7d/7IbVfalEAJeFw+ImK1pPiIuEDDaXXTmgIxAM9s
-N15n4HB2xT1H2fpoRVPA3gpZKnYkQI8KogsmHDKWJBZbB8D75kIEU4M7D6Tqmw==
+MIIBqzCCATCgAwIBAgIRAN2p/ttocRN9uqw540U06kMwCgYIKoZIzj0EAwMwFjEU
+MBIGA1UEAxMLYzhzIE1lc2ggQ0EwHhcNMjYwOTI1MTc1NzU2WhcNMjcwOTI1MTc1
+NzU2WjAWMRQwEgYDVQQDEwtjOHMgTWVzaCBDQTB2MBAGByqGSM49AgEGBSuBBAAi
+A2IABOnKEc2PQgsFpR2TSBNZQ95uFn8sCizQBFD2WKnT07+W39mPGci1zps4Fiky
+wO49Xa7cHezEWw7QLjz36Yj/EjDuaYgR5kvX0/lrspGm9J9Q5MZSBf4yQ2wdtVnZ
+YOcmjqNCMEAwDgYDVR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0O
+BBYEFMi0jYKhDbbcFhm0ZIuCBs3cAmr4MAoGCCqGSM49BAMDA2kAMGYCMQCqcchp
+Oc1siT7wYmoz46TZAIK4KwdVytOJKuQLB6VD6jikx/pyhzjvUnJFImhj63QCMQCW
+Svmo45lTqeBfiwqs0NHjd8NGxF0CUwYULqjYGyU0MBB3ZBCeCx95EnY16txmxDM=
 -----END CERTIFICATE-----`;
 
 export const PROFILES: Record<string, Profile> = {
