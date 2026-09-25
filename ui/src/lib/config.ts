@@ -121,13 +121,17 @@ export const PINS: TdxImagePin = DEFAULT_PROFILE.tdxImage;
 export const MESH_CA_PEM: string = DEFAULT_PROFILE.meshCaPem;
 
 /**
- * Development convenience: a bearer token supplied at build time so the scan
- * page can be used without pasting one. Set it in `.env.local`, which is not
- * committed — the token is a live credential for an endpoint that runs billed
- * inference, so it must never enter this repository. When it is unset the page
- * asks for a token as before.
+ * A bearer token compiled into the page, so visitors can submit scans without
+ * holding one. `NEXT_PUBLIC_*` means exactly that — the value ships in the
+ * client bundle, and anyone who loads the page can read it and call the API
+ * directly. That is the intended trade for a shared endpoint, and it is a
+ * decision about who may spend its inference budget, not about
+ * confidentiality: the token is still sealed to the attested enclave in
+ * transit, and the operators still cannot read the code being scanned.
+ *
+ * Leave it unset and the page asks each visitor for their own token instead.
  */
-export const DEV_TOKEN = process.env.NEXT_PUBLIC_SCAN_TOKEN ?? "";
+export const SHARED_TOKEN = process.env.NEXT_PUBLIC_SCAN_TOKEN ?? "";
 
 /** Copy the pages need that is not a security anchor. */
 export const SITE = {

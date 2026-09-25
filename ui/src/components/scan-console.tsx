@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, isPending, outcomeOf, ScanApi, type ScanJob } from "@/lib/api";
 import { useVerify } from "@/lib/verify-context";
-import { DEV_TOKEN } from "@/lib/config";
+import { SHARED_TOKEN } from "@/lib/config";
 import { Card } from "./section";
 import { Markdown } from "./markdown";
 import { CopyButton } from "./copy-button";
@@ -117,7 +117,7 @@ export function ScanConsole() {
 
   return (
     <div className="flex flex-col gap-6">
-      {!DEV_TOKEN && (
+      {!SHARED_TOKEN && (
         <Card>
           <label className="block">
             <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wider text-muted">

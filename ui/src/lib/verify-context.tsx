@@ -18,7 +18,7 @@ import {
   type StepState,
   type VerifySuccess,
 } from "./verify-flow";
-import { DEV_TOKEN, MESH_CA_PEM, PINS, SITE } from "./config";
+import { SHARED_TOKEN, MESH_CA_PEM, PINS, SITE } from "./config";
 
 export interface StepInfo {
   state: StepState;
@@ -82,7 +82,7 @@ export function VerifyProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<VerifyContextValue["error"]>(null);
   const pins = PUBLISHED_PINS;
   const [verifyEpoch, setVerifyEpoch] = useState(0);
-  const [token, setToken] = useState(DEV_TOKEN);
+  const [token, setToken] = useState(SHARED_TOKEN);
   const sessionRef = useRef<Session | null>(null);
 
   const setStep = useCallback((id: StepId, state: StepState, detail?: string) => {

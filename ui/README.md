@@ -121,10 +121,16 @@ Next.js builder reads the export itself and looks for its own build manifests
 under `.next`; pointing it at `out` makes it fail with a missing
 `routes-manifest.json` *after* an otherwise successful build. Node 22.
 
-Do **not** set `NEXT_PUBLIC_SCAN_TOKEN` on a deployment. Anything `NEXT_PUBLIC_*`
-is compiled into the client bundle and readable by every visitor; it exists for
-`.env.local` during development, and without it the page asks each visitor for
-their own token.
+`NEXT_PUBLIC_SCAN_TOKEN` supplies the `/v1/scans` bearer token for everyone who
+loads the page, and the token field disappears. Set it when the endpoint is
+meant to be shared. Be clear-eyed about what it is: `NEXT_PUBLIC_*` is compiled
+into the client bundle, so any visitor can read the token and call the API
+themselves. That governs who may spend the endpoint's inference budget — it is
+not a confidentiality question, since the token is still sealed to the attested
+enclave in transit and the operators still cannot read the code being scanned.
+Rotate it by changing the variable and redeploying.
+
+Leave it unset and each visitor brings their own token instead.
 
 The pins are compiled in at build time. A rebuilt cluster changes its RTMRs and
 its mesh CA, so it needs a redeploy, not a reload — which is the intended
